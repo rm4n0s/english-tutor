@@ -43,3 +43,51 @@ func FormatWords(n int) string {
 	}
 	return fmt.Sprintf("%d words", n)
 }
+
+// CheckStatus is the state of the last check, for the status bar.
+type CheckStatus int
+
+// The check states.
+const (
+	StatusIdle CheckStatus = iota
+	StatusChecking
+	StatusCancelled
+	StatusFailed
+	StatusDiscarded
+)
+
+// FormatStatus is the left part of the status bar (section 4.1). checked says
+// whether a check has finished; issues is the number of issues placed and
+// unplaced the number the locator could not place.
+func FormatStatus(s CheckStatus, checked bool, issues, unplaced int) string {
+	switch s {
+	case StatusChecking:
+		return "Checking..."
+	case StatusCancelled:
+		return "Check cancelled"
+	case StatusFailed:
+		return "Check failed"
+	case StatusDiscarded:
+		return "The text changed while checking. Press Check again."
+	}
+	if !checked {
+		return "Ready"
+	}
+	var text string
+	switch issues {
+	case 0:
+		text = "No errors found"
+	case 1:
+		text = "1 issue"
+	default:
+		text = fmt.Sprintf("%d issues", issues)
+	}
+	switch unplaced {
+	case 0:
+	case 1:
+		text += " · 1 issue could not be placed"
+	default:
+		text += fmt.Sprintf(" · %d issues could not be placed", unplaced)
+	}
+	return text
+}

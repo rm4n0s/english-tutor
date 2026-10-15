@@ -4,7 +4,15 @@ package app
 import (
 	"context"
 	"log/slog"
+	"sync"
+	"time"
 
+	qt "github.com/mappu/miqt/qt6"
+	"github.com/tmc/langchaingo/llms"
+
+	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/issues"
+	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
 	"github.com/rm4n0s/english-tutor/internal/ui"
@@ -19,26 +27,97 @@ import (
 // calls, statistics queries, saving documents) goes through goroutines in the
 // later steps (section 6 of the spec).
 type App struct {
-	ctx   context.Context
-	log   *slog.Logger
-	store *store.Store
-	win   *ui.MainWindow
+	ctx      context.Context
+	log      *slog.Logger
+	store    *store.Store
+	stats    *store.Stats
+	analyzer *analysis.Analyzer
+	win      *ui.MainWindow
+	state    *issues.State
+
+	// newModel builds the langchaingo model of a configured LLM. Tests replace
+	// it with a fake.
+	newModel func(cfg store.LLMConfig) (llms.Model, error)
+
+	// sourceKey identifies the text for the statistics (section 5.7).
+	sourceKey string
+
+	// The fields below belong to the UI thread.
+	checkSeq     uint64 // number of the latest check started
+	checking     bool
+	status       ui.CheckStatus
+	unplaced     int
+	lastUsage    llm.Usage
+	sessionUsage llm.Usage
+	fromEditor   bool // a selection that came from the text cursor must not move it
+
+	autoCheck bool
+	autoDelay time.Duration
+	autoTimer *qt.QTimer
+
+	// bg counts the goroutines started by goBackground.
+	bg sync.WaitGroup
 }
 
 // New builds the window and loads the saved state into it. A setting that
 // cannot be read is logged and replaced by its default, so the application
 // still starts.
 func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
-	a := &App{ctx: ctx, log: log, store: st, win: ui.NewMainWindow()}
+	stats := store.NewStats(st, nil)
+	a := &App{
+		ctx:       ctx,
+		log:       log,
+		store:     st,
+		stats:     stats,
+		analyzer:  analysis.NewAnalyzer(analysis.AnalyzerConfig{Usage: stats, Logger: log}),
+		win:       ui.NewMainWindow(),
+		state:     issues.New(),
+		sourceKey: newSessionKey(),
+		newModel: func(cfg store.LLMConfig) (llms.Model, error) {
+			return llm.New(cfg.ModelConfig())
+		},
+		autoDelay: store.DefaultAutoCheckSec * time.Second,
+	}
+	a.autoTimer = qt.NewQTimer()
+	a.autoTimer.SetSingleShot(true)
+	a.autoTimer.OnTimeout(a.onAutoCheckTimer)
+	a.state.Subscribe(a.onStateChange)
 	a.win.SetHandlers(ui.Handlers{
+		Check:            func() { a.startCheck(true) },
+		Cancel:           a.analyzer.Cancel,
+		Preferences:      a.openPreferences,
 		LLMSelected:      a.onLLMSelected,
 		AutoCheckChanged: a.onAutoCheckChanged,
-		Preferences:      a.openPreferences,
-		Closed:           a.saveWindowState,
+		CategoryToggled:  a.state.SetCategoryVisible,
+		TextChanged:      a.onTextChanged,
+		TextEdited: func(pos, removed, added int) {
+			a.state.ApplyEdit(issues.Edit{Pos: pos, Removed: removed, Added: added})
+		},
+		CursorMoved: a.onCursorMoved,
+		TooltipAt:   a.tooltipAt,
+		NextIssue:   func() { a.stepIssue(a.state.Next) },
+		PrevIssue:   func() { a.stepIssue(a.state.Prev) },
+		Closed:      a.onClosed,
 	})
 	a.loadState()
+	a.refreshStatus()
 	return a
 }
+
+// goBackground runs f in a goroutine that Wait waits for. Goroutines must not
+// touch Qt; they post their result to the UI thread with mainthread.Start.
+func (a *App) goBackground(f func()) {
+	a.bg.Add(1)
+	go func() {
+		defer a.bg.Done()
+		f()
+	}()
+}
+
+// Wait blocks until the background goroutines have ended, so that nothing
+// posts to the window after it is gone. Cancel the root context (and the
+// analyzer) first, and do not call it on the UI thread.
+func (a *App) Wait() { a.bg.Wait() }
 
 // Show shows the main window.
 func (a *App) Show() { a.win.Show() }
@@ -49,11 +128,7 @@ func (a *App) Window() *ui.MainWindow { return a.win }
 func (a *App) loadState() {
 	a.reloadLLMs()
 
-	if on, err := a.store.AutoCheck(a.ctx); err != nil {
-		logging.LogError(a.log, "reading auto-check setting", err)
-	} else {
-		a.win.SetAutoCheck(on)
-	}
+	a.loadAutoCheck()
 	if size, err := a.store.FontSize(a.ctx); err != nil {
 		logging.LogError(a.log, "reading font size", err)
 	} else {
@@ -103,6 +178,29 @@ func (a *App) onAutoCheckChanged(on bool) {
 	if err := a.store.SetAutoCheck(a.ctx, on); err != nil {
 		logging.LogError(a.log, "saving auto-check setting", err)
 	}
+	a.setAutoCheck(on)
+}
+
+// loadAutoCheck reads the auto-check settings into the window and the timer.
+func (a *App) loadAutoCheck() {
+	on, err := a.store.AutoCheck(a.ctx)
+	if err != nil {
+		logging.LogError(a.log, "reading auto-check setting", err)
+		on = false
+	}
+	if secs, err := a.store.AutoCheckDelaySeconds(a.ctx); err != nil {
+		logging.LogError(a.log, "reading auto-check delay", err)
+	} else {
+		a.autoDelay = time.Duration(secs) * time.Second
+	}
+	a.win.SetAutoCheck(on)
+	a.setAutoCheck(on)
+}
+
+func (a *App) onClosed() {
+	a.analyzer.Cancel()
+	a.autoTimer.Stop()
+	a.saveWindowState()
 }
 
 func (a *App) saveWindowState() {

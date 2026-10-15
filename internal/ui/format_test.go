@@ -63,3 +63,32 @@ func TestFormatWords(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatStatus(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   CheckStatus
+		checked  bool
+		issues   int
+		unplaced int
+		want     string
+	}{
+		{"before the first check", StatusIdle, false, 0, 0, "Ready"},
+		{"checking", StatusChecking, true, 3, 0, "Checking..."},
+		{"cancelled", StatusCancelled, true, 3, 0, "Check cancelled"},
+		{"failed", StatusFailed, false, 0, 0, "Check failed"},
+		{"discarded", StatusDiscarded, true, 0, 0, "The text changed while checking. Press Check again."},
+		{"no errors", StatusIdle, true, 0, 0, "No errors found"},
+		{"one issue", StatusIdle, true, 1, 0, "1 issue"},
+		{"several issues", StatusIdle, true, 3, 0, "3 issues"},
+		{"one could not be placed", StatusIdle, true, 3, 1, "3 issues · 1 issue could not be placed"},
+		{"several could not be placed", StatusIdle, true, 0, 2, "No errors found · 2 issues could not be placed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FormatStatus(tt.status, tt.checked, tt.issues, tt.unplaced); got != tt.want {
+				t.Errorf("FormatStatus() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

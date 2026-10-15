@@ -29,6 +29,18 @@ type Handlers struct {
 	CategoryToggled  func(c analysis.Category, visible bool)
 	TextChanged      func()
 
+	// TextEdited reports every change of the text: at UTF-16 position pos,
+	// removed units were replaced by added units (QTextDocument's
+	// contentsChange).
+	TextEdited func(pos, removed, added int)
+	// CursorMoved reports the new text cursor position (UTF-16 units).
+	CursorMoved func(pos int)
+	// TooltipAt returns the tooltip for the text position under the mouse, or
+	// "" for none.
+	TooltipAt func(pos int) string
+	// NextIssue and PrevIssue are F7 and Shift+F7.
+	NextIssue, PrevIssue func()
+
 	// CanClose is asked when the user closes the window; returning false keeps
 	// it open (for the unsaved-changes prompt).
 	CanClose func() bool
@@ -74,6 +86,13 @@ type MainWindow struct {
 	stateLabel  *qt.QLabel
 	wordsLabel  *qt.QLabel
 	tokensLabel *qt.QLabel
+
+	banner      *qt.QWidget
+	bannerLabel *qt.QLabel
+
+	underlines   []Underline
+	nextShortcut *qt.QShortcut
+	prevShortcut *qt.QShortcut
 
 	checking      bool
 	showingHint   bool
@@ -186,7 +205,32 @@ func (w *MainWindow) buildCentral() {
 	w.hSplit.SetStretchFactor(0, 2)
 	w.hSplit.SetStretchFactor(1, 1)
 	w.hSplit.SetChildrenCollapsible(false)
-	w.win.SetCentralWidget(w.hSplit.QWidget)
+
+	// A non-modal banner for errors sits above everything else (section 10).
+	w.banner = qt.NewQWidget2()
+	bannerLayout := qt.NewQHBoxLayout2()
+	bannerLayout.SetContentsMargins(8, 4, 8, 4)
+	w.banner.SetLayout(bannerLayout.QLayout)
+	w.bannerLabel = qt.NewQLabel3("")
+	w.bannerLabel.SetWordWrap(true)
+	w.bannerLabel.SetTextInteractionFlags(qt.TextSelectableByMouse)
+	dismiss := qt.NewQToolButton2()
+	dismiss.SetText("×")
+	dismiss.SetToolTip("Dismiss")
+	dismiss.OnClicked(w.ClearError)
+	bannerLayout.AddWidget2(w.bannerLabel.QWidget, 1)
+	bannerLayout.AddWidget(dismiss.QWidget)
+	w.banner.SetStyleSheet("QWidget { background: #FBE9DD; color: #7A2E00; } QToolButton { border: none; font-weight: bold; }")
+	w.banner.Hide()
+
+	central := qt.NewQWidget2()
+	centralLayout := qt.NewQVBoxLayout2()
+	centralLayout.SetContentsMargins(0, 0, 0, 0)
+	centralLayout.SetSpacing(0)
+	central.SetLayout(centralLayout.QLayout)
+	centralLayout.AddWidget(w.banner)
+	centralLayout.AddWidget2(w.hSplit.QWidget, 1)
+	w.win.SetCentralWidget(central)
 }
 
 func (w *MainWindow) buildStatusBar() {
@@ -239,6 +283,22 @@ func (w *MainWindow) connect() {
 		w.updateWordCount()
 		call(w.handlers.TextChanged)
 	})
+	w.editor.Document().OnContentsChange(func(pos, removed, added int) {
+		if w.handlers.TextEdited != nil {
+			w.handlers.TextEdited(pos, removed, added)
+		}
+	})
+	w.editor.OnCursorPositionChanged(func() {
+		if w.handlers.CursorMoved != nil {
+			w.handlers.CursorMoved(w.editor.TextCursor().Position())
+		}
+	})
+	w.editor.Viewport().SetMouseTracking(true)
+	w.editor.OnViewportEvent(w.viewportEvent)
+	w.nextShortcut = qt.NewQShortcut2(qt.NewQKeySequence2("F7"), w.win.QObject)
+	w.nextShortcut.OnActivated(func() { call(w.handlers.NextIssue) })
+	w.prevShortcut = qt.NewQShortcut2(qt.NewQKeySequence2("Shift+F7"), w.win.QObject)
+	w.prevShortcut.OnActivated(func() { call(w.handlers.PrevIssue) })
 	w.explain.OnAnchorClicked(func(u *qt.QUrl) {
 		// Only the link of the no-LLM message is followed. Links in LLM
 		// explanations are handled with a confirmation in step 13.
@@ -434,4 +494,159 @@ func (w *MainWindow) SetSplitterSizes(sizes []int) {
 	}
 	w.hSplit.SetSizes(sizes[:2])
 	w.vSplit.SetSizes(sizes[2:])
+}
+
+// Underline is one underlined range of the text, in UTF-16 units. A selected
+// underline is also drawn with a background of the category colour at about 20%
+// opacity (section 4.2).
+type Underline struct {
+	Start, End int
+	Category   analysis.Category
+	Selected   bool
+}
+
+// selectedAlpha is 20% of 255.
+const selectedAlpha = 51
+
+// SetUnderlines replaces the underlines of the editor. They are extra
+// selections, so they never change the text or the undo stack. The selected
+// one is added last so that its background is drawn over the others.
+func (w *MainWindow) SetUnderlines(us []Underline) {
+	w.underlines = append([]Underline(nil), us...)
+	dark := w.isDark()
+	ordered := make([]Underline, 0, len(us))
+	for _, u := range us {
+		if !u.Selected {
+			ordered = append(ordered, u)
+		}
+	}
+	for _, u := range us {
+		if u.Selected {
+			ordered = append(ordered, u)
+		}
+	}
+
+	var sels []qt.QTextEdit__ExtraSelection
+	var cleanup []func()
+	for _, u := range ordered {
+		cur := qt.NewQTextCursor2(w.editor.Document())
+		cur.SetPosition(u.Start)
+		cur.SetPosition2(u.End, qt.QTextCursor__KeepAnchor)
+		color := qt.NewQColor6(CategoryColor(u.Category, dark))
+		format := qt.NewQTextCharFormat()
+		format.SetUnderlineStyle(underlineStyle(CategoryStyle(u.Category)))
+		format.SetUnderlineColor(color)
+		if u.Selected {
+			bg := qt.NewQColor6(CategoryColor(u.Category, dark))
+			bg.SetAlpha(selectedAlpha)
+			brush := qt.NewQBrush3(bg)
+			format.SetBackground(brush)
+			cleanup = append(cleanup, brush.Delete, bg.Delete)
+		}
+		sel := qt.NewQTextEdit__ExtraSelection2()
+		sel.SetCursor(*cur)
+		sel.SetFormat(*format)
+		sels = append(sels, *sel)
+		cleanup = append(cleanup, sel.Delete, format.Delete, color.Delete, cur.Delete)
+	}
+	w.editor.SetExtraSelections(sels)
+	for _, c := range cleanup {
+		c()
+	}
+}
+
+// Underlines returns the underlines last set, for tests and for callers that
+// need to know what is drawn.
+func (w *MainWindow) Underlines() []Underline { return append([]Underline(nil), w.underlines...) }
+
+func underlineStyle(s UnderlineStyle) qt.QTextCharFormat__UnderlineStyle {
+	switch s {
+	case UnderlineDash:
+		return qt.QTextCharFormat__DashUnderline
+	case UnderlineDot:
+		return qt.QTextCharFormat__DotLine
+	default:
+		return qt.QTextCharFormat__WaveUnderline
+	}
+}
+
+// viewportEvent answers the editor's tooltip events from the handler.
+func (w *MainWindow) viewportEvent(super func(ev *qt.QEvent) bool, ev *qt.QEvent) bool {
+	if ev.Type() != qt.QEvent__ToolTip || w.handlers.TooltipAt == nil {
+		return super(ev)
+	}
+	help := qt.UnsafeNewQHelpEvent(ev.UnsafePointer())
+	pos := w.editor.CursorForPosition(help.Pos()).Position()
+	if text := w.handlers.TooltipAt(pos); text != "" {
+		qt.QToolTip_ShowText2(help.GlobalPos(), text, w.editor.QWidget)
+	} else {
+		qt.QToolTip_HideText()
+		ev.Ignore()
+	}
+	return true
+}
+
+// CursorPosition returns the text cursor position in UTF-16 units.
+func (w *MainWindow) CursorPosition() int { return w.editor.TextCursor().Position() }
+
+// MoveCursorTo puts the text cursor at pos and scrolls it into view. It does
+// not take keyboard focus away from the widget that has it.
+func (w *MainWindow) MoveCursorTo(pos int) {
+	c := w.editor.TextCursor()
+	c.SetPosition(pos)
+	w.editor.SetTextCursor(c)
+	w.editor.EnsureCursorVisible()
+}
+
+// FocusEditor gives the keyboard focus to the editor.
+func (w *MainWindow) FocusEditor() { w.editor.SetFocus() }
+
+// ShowError shows a message in the banner above the editor. It stays until the
+// user dismisses it or ClearError is called.
+func (w *MainWindow) ShowError(msg string) {
+	w.bannerLabel.SetText(msg)
+	w.banner.Show()
+}
+
+// ClearError hides the banner.
+func (w *MainWindow) ClearError() {
+	w.bannerLabel.SetText("")
+	w.banner.Hide()
+}
+
+// The methods below let tests of the code that sets the handlers act as the
+// user and read what the window shows.
+
+// CheckButtonClick presses the Check (or Cancel) button.
+func (w *MainWindow) CheckButtonClick() { w.checkBtn.Click() }
+
+// CheckButtonText returns the text of the Check / Cancel button.
+func (w *MainWindow) CheckButtonText() string { return w.checkBtn.Text() }
+
+// LegendButtonClick clicks the legend entry of a category.
+func (w *MainWindow) LegendButtonClick(c analysis.Category) {
+	if b := w.legend[c]; b != nil {
+		b.Click()
+	}
+}
+
+// InsertTextAt inserts text at the UTF-16 position pos, as if it were typed.
+func (w *MainWindow) InsertTextAt(pos int, text string) {
+	c := w.editor.TextCursor()
+	c.SetPosition(pos)
+	c.InsertText(text)
+}
+
+// StatusText returns the left part of the status bar.
+func (w *MainWindow) StatusText() string { return w.stateLabel.Text() }
+
+// TokensText returns the token part of the status bar.
+func (w *MainWindow) TokensText() string { return w.tokensLabel.Text() }
+
+// ErrorText returns the text of the error banner, or "" if it is hidden.
+func (w *MainWindow) ErrorText() string {
+	if w.banner.IsHidden() {
+		return ""
+	}
+	return w.bannerLabel.Text()
 }

@@ -75,11 +75,7 @@ func (a *App) openPreferences() {
 // applyPreferences reloads what the Preferences dialog may have changed.
 func (a *App) applyPreferences() {
 	a.reloadLLMs()
-	if on, err := a.store.AutoCheck(a.ctx); err != nil {
-		logging.LogError(a.log, "reading auto-check setting", err)
-	} else {
-		a.win.SetAutoCheck(on)
-	}
+	a.loadAutoCheck()
 	if size, err := a.store.FontSize(a.ctx); err != nil {
 		logging.LogError(a.log, "reading font size", err)
 	} else {

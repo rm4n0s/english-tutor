@@ -53,6 +53,8 @@ func Run(args []string) int {
 	a := New(ctx, log, st)
 	a.Show()
 	code := qt.QApplication_Exec()
+	cancel()
+	a.Wait() // a check or a save that was still running ends before the database closes
 	log.Info("english-tutor stopped", "code", code)
 	return code
 }

@@ -14,6 +14,10 @@ type Item struct {
 	analysis.Issue
 	Start int
 	End   int
+	// Fingerprint identifies the mistake within the checked text (section 5.7).
+	// It is computed from the text at check time, because later edits would
+	// change the occurrence index.
+	Fingerprint string
 }
 
 // Range returns the item's range.
@@ -23,12 +27,18 @@ func (it Item) Range() Range { return Range{it.Start, it.End} }
 func (it Item) Category() analysis.Category { return it.Type.Category }
 
 // FromPlaced converts the byte offsets of placed issues, which refer to text,
-// into UTF-16 offsets. IDs are left for the State to assign.
+// into UTF-16 offsets and computes their fingerprints. IDs are left for the
+// State to assign.
 func FromPlaced(text string, placed []analysis.Placed) []Item {
 	m := analysis.NewUTF16Map(text)
 	items := make([]Item, len(placed))
 	for i, p := range placed {
-		items[i] = Item{Issue: p.Issue, Start: m.Offset(p.Start), End: m.Offset(p.End)}
+		items[i] = Item{
+			Issue:       p.Issue,
+			Start:       m.Offset(p.Start),
+			End:         m.Offset(p.End),
+			Fingerprint: analysis.Fingerprint(text, p.Start, p.End),
+		}
 	}
 	return items
 }

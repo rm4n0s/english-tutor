@@ -479,4 +479,7 @@ func TestFromPlaced(t *testing.T) {
 	if got[0].Text != "he go" || got[0].Category() != analysis.Grammar {
 		t.Errorf("issue data lost: %+v", got[0])
 	}
+	if want := analysis.Fingerprint(text, start, start+len("he go")); got[0].Fingerprint != want {
+		t.Errorf("fingerprint = %q, want the one computed from the byte offsets %q", got[0].Fingerprint, want)
+	}
 }
