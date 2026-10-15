@@ -371,6 +371,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `StatsResetFailed` | `store` | Reset statistics or Not an error fails to delete |
 | `UsageSaveFailed` | `store` | saving a request's token usage fails (the check result is still shown) |
 | `LogFileOpenFailed` | `logging` | the log file cannot be opened (the app falls back to stderr) |
+| `LogRotateFailed` | `logging` | the log file cannot be rotated (the record is still written to the current file) |
 | `UnknownProvider` | `llm` | provider string is not supported |
 | `LLMClientCreateFailed` | `llm` | langchaingo client construction fails |
 | `LLMCallFailed` | `analysis` | the request fails (network, auth, rate limit) |
