@@ -266,6 +266,10 @@ func (w *MainWindow) isDark() bool {
 	return w.win.Palette().Window().Color().Lightness() < 128
 }
 
+// PreferencesButtonClick presses the Preferences button, as the user would.
+// It exists for tests of the code that sets the handlers.
+func (w *MainWindow) PreferencesButtonClick() { w.prefsBtn.Click() }
+
 // SetHandlers sets the actions the window reports.
 func (w *MainWindow) SetHandlers(h Handlers) { w.handlers = h }
 

@@ -33,6 +33,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	a.win.SetHandlers(ui.Handlers{
 		LLMSelected:      a.onLLMSelected,
 		AutoCheckChanged: a.onAutoCheckChanged,
+		Preferences:      a.openPreferences,
 		Closed:           a.saveWindowState,
 	})
 	a.loadState()
@@ -71,7 +72,8 @@ func (a *App) loadState() {
 }
 
 // reloadLLMs refills the selector from the database and selects the remembered
-// LLM.
+// LLM. If that LLM no longer exists (it was deleted), the selector falls back
+// to another one, or to none, and the choice is remembered.
 func (a *App) reloadLLMs() {
 	cfgs, err := a.store.ListLLMConfigs(a.ctx)
 	if err != nil {
@@ -86,6 +88,9 @@ func (a *App) reloadLLMs() {
 		logging.LogError(a.log, "reading selected LLM", err)
 	}
 	a.win.SetLLMs(choices, selected)
+	if now := a.win.SelectedLLMID(); err == nil && now != selected {
+		a.onLLMSelected(now)
+	}
 }
 
 func (a *App) onLLMSelected(id uint) {
