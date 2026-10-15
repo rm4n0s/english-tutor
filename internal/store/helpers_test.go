@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/rm4n0s/errors"
+
+	"github.com/rm4n0s/english-tutor/internal/llm"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -52,7 +54,7 @@ func assertRoute(t *testing.T, err error, route string) {
 func validConfig(name string) *LLMConfig {
 	return &LLMConfig{
 		Name:        name,
-		Provider:    ProviderOllama,
+		Provider:    string(llm.ProviderOllama),
 		Model:       "llama3.1",
 		BaseURL:     "http://localhost:11434",
 		Temperature: DefaultTemperature,

@@ -5,13 +5,8 @@ import (
 	"time"
 
 	"github.com/rm4n0s/errors"
-)
 
-// Provider names stored in LLMConfig.Provider.
-const (
-	ProviderOllama           = "ollama"
-	ProviderOpenAICompatible = "openai-compatible"
-	ProviderAnthropic        = "anthropic"
+	"github.com/rm4n0s/english-tutor/internal/llm"
 )
 
 // DefaultTemperature is used when the user does not choose one.
@@ -32,35 +27,24 @@ type LLMConfig struct {
 	UpdatedAt   time.Time
 }
 
-// Validate checks that the fields required by the provider are present. The
-// message of the returned error is meant to be shown to the user.
-func (c *LLMConfig) Validate() error {
-	if strings.TrimSpace(c.Name) == "" {
-		return invalidConfig("name", "Name is required.")
+// ModelConfig converts c to the form the llm package builds models from.
+func (c *LLMConfig) ModelConfig() llm.ModelConfig {
+	return llm.ModelConfig{
+		Provider:    llm.Provider(c.Provider),
+		Model:       c.Model,
+		BaseURL:     strings.TrimSpace(c.BaseURL),
+		APIKey:      c.APIKey,
+		Temperature: c.Temperature,
 	}
-	if strings.TrimSpace(c.Model) == "" {
-		return invalidConfig("model", "Model is required.")
-	}
-	switch c.Provider {
-	case ProviderOllama, ProviderOpenAICompatible:
-		if strings.TrimSpace(c.BaseURL) == "" {
-			return invalidConfig("base_url", "Base URL is required for this provider.")
-		}
-	case ProviderAnthropic:
-		if strings.TrimSpace(c.APIKey) == "" {
-			return invalidConfig("api_key", "API key is required for Anthropic.")
-		}
-	default:
-		return invalidConfig("provider", "Provider must be ollama, openai-compatible or anthropic.")
-	}
-	if c.Temperature < 0 || c.Temperature > 2 {
-		return invalidConfig("temperature", "Temperature must be between 0 and 2.")
-	}
-	return nil
 }
 
-func invalidConfig(field, message string) error {
-	return errors.New("LLMConfigInvalid", message, "field", field)
+// Validate checks the name and the fields the provider needs. The message of
+// the returned error is meant to be shown to the user.
+func (c *LLMConfig) Validate() error {
+	if strings.TrimSpace(c.Name) == "" {
+		return errors.New("LLMConfigInvalid", "Name is required.", "field", "name")
+	}
+	return c.ModelConfig().Validate()
 }
 
 // Document is a text saved in the library.

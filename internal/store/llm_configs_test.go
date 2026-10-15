@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"github.com/rm4n0s/english-tutor/internal/llm"
 )
 
 func TestLLMConfigValidate(t *testing.T) {
@@ -14,24 +16,25 @@ func TestLLMConfigValidate(t *testing.T) {
 		{name: "valid ollama", mutate: func(*LLMConfig) {}},
 		{name: "empty name", mutate: func(c *LLMConfig) { c.Name = "  " }, wantField: "name"},
 		{name: "empty model", mutate: func(c *LLMConfig) { c.Model = "" }, wantField: "model"},
-		{name: "unknown provider", mutate: func(c *LLMConfig) { c.Provider = "bard" }, wantField: "provider"},
+		{name: "bad base url", mutate: func(c *LLMConfig) { c.BaseURL = "localhost:11434/\x7f" }, wantField: "base_url"},
+		{name: "base url without scheme", mutate: func(c *LLMConfig) { c.BaseURL = "localhost:11434" }, wantField: "base_url"},
 		{name: "ollama needs base url", mutate: func(c *LLMConfig) { c.BaseURL = "" }, wantField: "base_url"},
 		{
 			name:   "openai-compatible without key is allowed",
-			mutate: func(c *LLMConfig) { c.Provider = ProviderOpenAICompatible; c.APIKey = "" },
+			mutate: func(c *LLMConfig) { c.Provider = string(llm.ProviderOpenAICompatible); c.APIKey = "" },
 		},
 		{
 			name:      "openai-compatible needs base url",
-			mutate:    func(c *LLMConfig) { c.Provider = ProviderOpenAICompatible; c.BaseURL = "" },
+			mutate:    func(c *LLMConfig) { c.Provider = string(llm.ProviderOpenAICompatible); c.BaseURL = "" },
 			wantField: "base_url",
 		},
 		{
 			name:   "anthropic with key and no base url",
-			mutate: func(c *LLMConfig) { c.Provider = ProviderAnthropic; c.BaseURL = ""; c.APIKey = "k" },
+			mutate: func(c *LLMConfig) { c.Provider = string(llm.ProviderAnthropic); c.BaseURL = ""; c.APIKey = "k" },
 		},
 		{
 			name:      "anthropic needs key",
-			mutate:    func(c *LLMConfig) { c.Provider = ProviderAnthropic; c.BaseURL = "" },
+			mutate:    func(c *LLMConfig) { c.Provider = string(llm.ProviderAnthropic); c.BaseURL = "" },
 			wantField: "api_key",
 		},
 		{name: "temperature too high", mutate: func(c *LLMConfig) { c.Temperature = 2.5 }, wantField: "temperature"},
@@ -58,9 +61,15 @@ func TestLLMConfigValidate(t *testing.T) {
 	}
 }
 
+func TestLLMConfigUnknownProvider(t *testing.T) {
+	cfg := validConfig("x")
+	cfg.Provider = "bard"
+	assertRoute(t, cfg.Validate(), "LLMConfig.Validate->ModelConfig.Validate->ParseProvider.UnknownProvider")
+}
+
 func TestLLMConfigAPIKeyNotInError(t *testing.T) {
 	cfg := validConfig("x")
-	cfg.Provider = ProviderAnthropic
+	cfg.Provider = string(llm.ProviderAnthropic)
 	cfg.APIKey = "sk-secret"
 	cfg.Model = ""
 	err := cfg.Validate()
@@ -111,7 +120,7 @@ func TestLLMConfigCRUD(t *testing.T) {
 
 	createdAt := got.CreatedAt
 	got.Name = "gamma"
-	got.Provider = ProviderAnthropic
+	got.Provider = string(llm.ProviderAnthropic)
 	got.APIKey = "sk-1"
 	got.BaseURL = ""
 	got.Model = "claude-sonnet-5-5"
@@ -123,7 +132,7 @@ func TestLLMConfigCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Name != "gamma" || again.Provider != ProviderAnthropic || again.APIKey != "sk-1" ||
+	if again.Name != "gamma" || again.Provider != string(llm.ProviderAnthropic) || again.APIKey != "sk-1" ||
 		again.BaseURL != "" || again.Temperature != 0.7 {
 		t.Errorf("after update = %+v", again)
 	}
@@ -154,7 +163,7 @@ func TestLLMConfigFailures(t *testing.T) {
 				c.Model = ""
 				return s.CreateLLMConfig(ctx, c)
 			},
-			route: "Store.CreateLLMConfig->LLMConfig.Validate->invalidConfig.LLMConfigInvalid",
+			route: "Store.CreateLLMConfig->LLMConfig.Validate->ModelConfig.Validate->invalidConfig.LLMConfigInvalid",
 		},
 		{
 			name: "create with duplicate name",
@@ -188,7 +197,7 @@ func TestLLMConfigFailures(t *testing.T) {
 				c.Provider = "nope"
 				return s.UpdateLLMConfig(ctx, c)
 			},
-			route: "Store.UpdateLLMConfig->LLMConfig.Validate->invalidConfig.LLMConfigInvalid",
+			route: "Store.UpdateLLMConfig->LLMConfig.Validate->ModelConfig.Validate->ParseProvider.UnknownProvider",
 		},
 		{
 			name: "update missing config",
