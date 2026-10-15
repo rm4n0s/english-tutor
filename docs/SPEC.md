@@ -266,7 +266,7 @@ Counting only makes sense if the same mistake always gets the same name. LLMs in
   - `file:<absolute path>` for a file,
   - `session:<uuid>` for a new unsaved text, generated at New or at start-up.
 
-  The pair (`source_key`, `fingerprint`) is unique. Inserting an existing pair does nothing.
+  The pair (`source_key`, `fingerprint`) is unique. Inserting an existing pair does nothing. The occurrence index is the number of times the same snippet (ignoring case) occurs in the text before it (`analysis.Fingerprint`).
 
   **Which source a text has** follows how VS Code identifies a buffer: a text has exactly one identity at a time, and *Save As* moves it to the new identity.
   - New starts a `session:<uuid>` source. Open (file) gives `file:<path>`. Open from the library gives `doc:<id>`.
@@ -278,6 +278,7 @@ Counting only makes sense if the same mistake always gets the same name. LLMs in
 - Fixing a mistake does not remove its count: the count says how often the user made the mistake, not how many remain.
 - **Not an error:** the button in the explanation panel deletes the issue's event, and the fingerprint is kept in an in-memory ignore set for the rest of the session so a re-check does not record it again. After a restart, the same false positive can be recorded again; this is accepted in v1.
 - The counts shown in the panel header and the Statistics dialog are read from the database with gorm's builder (`COUNT` grouped by error type, filtered by `created_at`).
+- `store.Stats` is the API for all of this: `Record` (reports inserted, duplicate and ignored counts), `NotAnError`, `MoveSource`, `TypeStats` (one row per error type with all-time, 30-day and 7-day counts and the last time seen), `CountForType` (panel header), `RecentExamples`, `ResetMistakes`, and `Summarize` for the line above the table. A window is "from now minus 7 (or 30) days, inclusive". `MoveSource` failing is `ErrorEventSaveFailed`. Time comes from an injected clock so the windows are testable.
 
 ### 5.8 Token usage
 
@@ -287,6 +288,7 @@ Counting only makes sense if the same mistake always gets the same name. LLMs in
 - Each request is also saved in `llm_usage` (LLM name, kind `check` or `explain`, input, output, estimated flag, timestamp). The Token usage tab of the Statistics dialog sums it per LLM for all time, 30 days and 7 days.
 - No money amount is calculated: prices differ per provider and change. Only tokens are shown.
 - A cancelled request records the usage it reports; if it reports none, nothing is recorded.
+- `store.Stats.RecordUsage` implements `analysis.UsageRecorder`; `UsageTotals` sums per LLM for a period (an `Estimated` flag is set when any request in the sum was estimated) and `ResetUsage` clears the table.
 
 ### 5.9 Untrusted text and output
 
