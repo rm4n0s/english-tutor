@@ -61,3 +61,29 @@ type Setting struct {
 	Key   string `gorm:"primaryKey"`
 	Value string
 }
+
+// ErrorEvent is one recorded mistake (section 5.7). The pair (SourceKey,
+// Fingerprint) is unique.
+type ErrorEvent struct {
+	ID          uint   `gorm:"primaryKey"`
+	ErrorType   string `gorm:"not null;index:idx_error_events_type_created,priority:1"`
+	Category    string `gorm:"not null"`
+	Snippet     string
+	SourceKey   string `gorm:"not null;uniqueIndex:ux_error_events_source_fingerprint,priority:1"`
+	Fingerprint string `gorm:"not null;uniqueIndex:ux_error_events_source_fingerprint,priority:2"`
+	LLMName     string
+	CreatedAt   time.Time `gorm:"not null;index:idx_error_events_type_created,priority:2"`
+}
+
+// LLMUsage is the token usage of one request (section 5.8).
+type LLMUsage struct {
+	ID           uint      `gorm:"primaryKey"`
+	LLMName      string    `gorm:"not null"`
+	Kind         string    `gorm:"not null"`
+	InputTokens  int       `gorm:"not null"`
+	OutputTokens int       `gorm:"not null"`
+	Estimated    bool      `gorm:"not null"`
+	CreatedAt    time.Time `gorm:"not null;index"`
+}
+
+func (LLMUsage) TableName() string { return "llm_usage" }
