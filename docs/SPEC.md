@@ -108,6 +108,7 @@ A list of all the errors found by the last check sits at the top of the right co
   - Selecting an issue, from either place, starts its explanation (section 5.4) and shows it in the explanation panel (section 4.4).
 - Double-clicking a row moves keyboard focus to the editor, with the cursor at the start of the issue.
 - The right-click menu on a row has **Not an error** (section 5.7) and **Regenerate explanation**.
+- The count badge is hidden for issues of an auto-check (they are not recorded). A selected row has a pale background and a bar on its left, so the coloured marker and the grey second line stay readable.
 - Empty states are shown as a single grey line in the list: before the first check "Press Check to find errors", while checking "Checking...", and after a check without issues "No errors found".
 - Rows disappear immediately when an edit removes their issue (section 5.5). Issues the locator could not place (section 5.3) are not listed; the status bar counts them.
 - The issue state (the list of placed issues and the selected one) is a plain Go type that the editor and the list both observe. The list and the editor never talk to each other directly.
@@ -124,6 +125,13 @@ A list of all the errors found by the last check sits at the top of the right co
 - A **Not an error** button removes the issue's underline and its recorded count, for when the LLM was wrong (section 5.7).
 - The explanation is requested only when an issue is selected, from the list or from the text (section 5.4), not for every issue during a check.
 - Explanations are cached in memory per issue for the lifetime of that check result. Re-selecting an issue shows the cached text. A "Regenerate" button asks the LLM again.
+- Details of the implementation:
+  - The button next to the count is **Regenerate** when the explanation is ready or was cancelled, and **Retry** when it failed; both ask the LLM again. **Cancel** is shown only while loading. **Not an error** is shown in every state except idle. After Cancel the body says "Explanation cancelled." and the Regenerate button stays.
+  - The header numbers are read from the statistics when the issue is selected. For an issue found by auto-check (not recorded) the header ends with "This one is not counted: only the Check button counts."; with no recorded mistakes of the type it reads "<label>: no mistake of this type recorded yet".
+  - A streaming explanation is re-rendered at most every 100 ms (the first chunk at once). The view keeps following the end of the text unless the user has scrolled up.
+  - Selecting nothing (clicking elsewhere), removing the selected issue (an edit or Not an error) or a new check result cancels a running explanation and returns the panel to idle; a result that arrives late is ignored. A new check result also clears the explanation cache.
+  - If no LLM is configured any more when an issue is selected, the panel shows the failed state with that message.
+  - **Links.** Qt never opens a link or loads a resource by itself. A clicked link goes through `DecideLink`: `http` and `https` links with a host get a confirmation dialog showing the full address and are then opened in the system browser; every other scheme (`file:`, `javascript:`, `data:`, `ftp:`, `mailto:` and relative links) is ignored; the `preferences:` link works only in the idle hint, never inside an explanation. The browser's resource loader returns nothing, so an image written into an explanation (remote or `file:`) is not fetched or read.
 
 ### 4.5 Preferences dialog
 
