@@ -133,7 +133,7 @@ A list of all the errors found by the last check sits at the top of the right co
   | Name | Unique, shown in the selector |
   | Provider | `ollama`, `openai-compatible`, `anthropic` |
   | Model | Free text, for example `llama3.1`, `gpt-4o`, `claude-sonnet-5-5` |
-  | Base URL | Required for `ollama` (default `http://localhost:11434`) and `openai-compatible`; optional for `anthropic` |
+  | Base URL | Required for `ollama` (default `http://localhost:11434`) and `openai-compatible`; optional for `anthropic`. Must be an `http://` or `https://` address (langchaingo's Ollama client would otherwise exit the program on an unparsable URL) |
   | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field |
   | Temperature | Optional, default 0.2 |
 
@@ -276,7 +276,7 @@ Counting only makes sense if the same mistake always gets the same name. LLMs in
 ### 5.8 Token usage
 
 - Every LLM request (each check chunk and each explanation; Test connection is excluded) records its input and output token counts.
-- langchaingo returns provider usage in the response's `GenerationInfo` map, and the key names differ per provider. `internal/llm` normalises them into `Usage{InputTokens, OutputTokens, Estimated}`. The exact keys, and whether streamed responses include usage, must be checked against the pinned langchaingo version when this is implemented. If a provider reports nothing, both numbers are estimated (about 4 characters per token) and `Estimated` is true; estimated numbers are shown with a `~`.
+- langchaingo returns provider usage in the response's `GenerationInfo` map, and the key names differ per provider. `internal/llm` normalises them into `Usage{InputTokens, OutputTokens, Estimated}`. With langchaingo v0.1.15 the keys are `PromptTokens` / `CompletionTokens` (OpenAI-compatible and Ollama) and `InputTokens` / `OutputTokens` (Anthropic); a test runs the real clients against local servers to guard them. Streamed responses use the same extraction; a provider that sends no usage while streaming (or only zeros) falls under the next rule, and this has not been checked against real servers. If a provider reports nothing, both numbers are estimated (about 4 characters per token) and `Estimated` is true; estimated numbers are shown with a `~`.
 - The status bar shows the last request and the session totals, for example `last: 812 in / 164 out · session: 5.2k in / 1.1k out`. Session totals reset when the app starts.
 - Each request is also saved in `llm_usage` (LLM name, kind `check` or `explain`, input, output, estimated flag, timestamp). The Token usage tab of the Statistics dialog sums it per LLM for all time, 30 days and 7 days.
 - No money amount is calculated: prices differ per provider and change. Only tokens are shown.
@@ -363,7 +363,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `DatabaseOpenFailed` | `store` | the SQLite file cannot be opened |
 | `MigrationFailed` | `store` | a numbered migration fails |
 | `LLMConfigNameTaken` | `store` | duplicate LLM name |
-| `LLMConfigInvalid` | `store`/`llm` | missing model, base URL or key for the provider |
+| `LLMConfigInvalid` | `store`/`llm` | missing name or model, missing or malformed base URL, missing key for the provider, temperature outside 0 to 2 (validated once, in `llm.ModelConfig.Validate`) |
 | `LLMConfigNotFound` | `store` | selected LLM id does not exist |
 | `DocumentNotFound` | `store` | library document id does not exist |
 | `DatabaseQueryFailed` | `store` | any other query on the configs, documents or settings tables fails |
