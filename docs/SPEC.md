@@ -204,6 +204,8 @@ The system prompt tells the model to act as an English teacher, to find only rea
 
 LLMs are unreliable at counting character offsets, so the model is never asked for offsets. The app computes them.
 
+Parsing is tolerant about packaging and strict about content: markdown fences and prose around the JSON are ignored, and a reply that is just a JSON array of issues is accepted, but the JSON must contain an `issues` list (an object without it, `null` or text is invalid). Entries without `text` are dropped and counted. `message` is cut at 300 characters, the contexts at 200, and a snippet over 2000 characters is dropped, so a model that ignores the contract cannot flood the UI. An empty `message` falls back to the label of the error type. The reply is never put in error metadata or logs.
+
 The prompt and the response structs live in `internal/analysis`. For long texts the app splits the input into chunks at paragraph boundaries (target at most about 2000 words per request), runs the chunks sequentially, and merges the results with offsets shifted by chunk start.
 
 ### 5.3 Locating issues
