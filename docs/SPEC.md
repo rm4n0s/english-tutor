@@ -336,7 +336,7 @@ Tables (created by numbered migrations, `001_init` first):
 
 `error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`.
 
-Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry.
+Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`. `splitter_sizes` holds four numbers as JSON: the horizontal splitter (editor, right column) then the vertical one (issues list, explanation panel). `window_geometry` is Qt's `saveGeometry()` bytes, base64 encoded. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry.
 
 API keys are stored in plain text in the database file. The `0600` permissions are the only protection. The Preferences dialog states this next to the API key field. Keys are never written to logs, error metadata or error messages.
 
@@ -356,9 +356,11 @@ internal/analysis/        prompts, response parsing, issue locating, chunking, e
 internal/issues/          issue state: placed issues, shared selection, category visibility, edit rebasing (no Qt)
 internal/ui/              main window, editor, issues list, explanation panel, dialogs
 internal/app/             application service tying store, llm and analysis to the UI
+internal/uitest/          test harness that runs the Qt event loop for tests (QT_QPA_PLATFORM=offscreen)
 ```
 
 - `internal/analysis`, `internal/issues` and `internal/llm` do not import miqt, so they can be tested without a display.
+- `internal/ui` keeps what can be tested without Qt (colours and underline styles, token and word formatting) in files that do not import miqt. `MainWindow` holds widgets and reports user actions through a `Handlers` struct; it has no application logic. `internal/app` sets the handlers and owns the persistence of window state and settings.
 - The UI depends on small interfaces (`Analyzer`, `Explainer`, `ConfigStore`, `DocumentStore`) implemented by `internal/app`, so UI code can be driven by fakes.
 
 ## 10. Error handling
@@ -408,6 +410,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 - **statistics:** in-memory SQLite. Recording the same check twice counts once; the same snippet in two sources counts twice; events move correctly when a session text is saved to a file or the library, including the duplicate case; grouped counts and the 7 / 30 day windows (with a fake clock); Not an error deletes the event and the ignore set stops re-recording; Reset deletes all events.
   - A fuzz test for the locator and the offset conversion (any input must not panic and must return in-range offsets).
 - **LLM calls:** a fake LLM (`httptest` server speaking the OpenAI-compatible wire format, or a fake `llms.Model`) that returns canned replies, errors, delays and streamed chunks. No real provider is ever called in tests.
+- **Qt widgets:** tests of windows and dialogs run with `QT_QPA_PLATFORM=offscreen` through `internal/uitest` (the Qt event loop runs on the main thread and each test reaches it with `uitest.OnUI`), so no display is needed. They check widget state, handlers, persistence and the layout (including a screenshot taken during development). If the offscreen plugin is not installed they are skipped with a message.
 - **UI:** the logic that does not need a display (edit-rebasing of issues, the shared issue state with its selection used by the editor and the list, category filtering, list row text and ordering, state machine of the explanation panel, debounce) lives in plain Go types and is unit tested. A small manual smoke checklist covers drawing and dialogs.
 - **Counting:** a second check where the fake LLM returns different context or a different error type for the same snippet records nothing new; two identical snippets in one text count twice; Save As moves the events to the new source without duplicates.
 - **Cancel:** cancelling a check leaves underlines and events unchanged and produces no error; cancelling mid-chunk discards finished chunks; a timeout still returns `LLMCallTimeout`.
@@ -415,7 +418,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 - **Untrusted text:** a text containing the closing delimiter or "ignore previous instructions" still produces a prompt with a unique random delimiter and the same parsing path; links other than http/https are never opened.
 - **Logging:** the log file is created with `0600`, rotates at the size limit, and contains no API key or user text.
 - Every tag in section 10 has a test that asserts the route with `HasRoute`.
-- Definition of done per CLAUDE.md: `gofmt`, `go vet ./...`, `golangci-lint run`, `go test -race ./...`. Tests that need a display are skipped when none is available.
+- Definition of done per CLAUDE.md: `gofmt`, `go vet ./...`, `golangci-lint run`, `go test -race ./...`. Qt tests need Qt's offscreen platform plugin and are skipped, with a message, when it is missing.
 
 ## 12. Milestones
 
