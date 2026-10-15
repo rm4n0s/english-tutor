@@ -229,6 +229,8 @@ When the user selects an issue, a second request is sent with: the full text (or
 
 The response is streamed through langchaingo's streaming callback and appended to the panel. The request is cancelled if the user selects another issue or edits the text such that the issue is invalidated.
 
+Details of `analysis.Explainer`: the issue's snippet is taken from the checked text at the issue's offsets (not from the model's quote). The context sent is the whole text if it has at most 600 words, otherwise the paragraph around the issue, cut to a 600-word chunk if the paragraph itself is longer. The snippet and context are delimited like in the check prompt. Only one explanation runs at a time: starting one, or reading a cached one, cancels the one that is streaming. Explanations are cached by a key the caller chooses (the UI uses the check id and issue id) and `Reset` clears the cache when a new check result replaces the old one. An empty answer is `LLMResponseInvalid`.
+
 ### 5.5 Edits after a check
 
 The editor listens to `contentsChange(position, removed, added)`.
@@ -296,7 +298,7 @@ The LLMs in this app have no tools: no file, network or code access. Text in an 
 
 - All Qt calls happen on the UI thread. Background work (LLM calls, database access) runs in goroutines and posts results back using miqt's main-thread dispatch helper.
 - Every goroutine that does I/O receives a `context.Context`. Closing the window cancels the root context and waits for goroutines to end.
-- The check and explanation requests have timeouts (default 60 s and 120 s). A timeout produces the same failure path as any other LLM error.
+- The check and explanation requests have timeouts (default 60 s and 120 s). The check timeout applies to each chunk's request, not to the whole check. A timeout produces `LLMCallTimeout`, and any other failure `LLMCallFailed`; both show their message in the error banner. Cancelling (by the user, by a newer request or by closing the window) is detected first and is not an error. Token usage is recorded for every request that reports it, including requests of a check that later fails or is cancelled.
 
 ## 7. Saving text
 
