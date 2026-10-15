@@ -37,7 +37,7 @@ A desktop application for practising written English. The user writes a sentence
 
 Dependencies and constraints:
 - miqt needs cgo and a C++ toolchain with the Qt 6 development packages installed, so the build is not pure Go. Build instructions go in the README.
-- The gorm SQLite driver is chosen at implementation time. `gorm.io/driver/sqlite` (cgo) is the default because cgo is already required. A pure-Go driver is an alternative.
+- The gorm SQLite driver is `gorm.io/driver/sqlite` (cgo), approved by the user because cgo is already required for Qt. A pure-Go driver would be the alternative if cgo ever has to go.
 - CLAUDE.md requires approval before adding dependencies beyond those named by the user. Each of the gorm driver, any markdown helper and any test helper needs approval when it is first added.
 - All database access goes through gorm's builder. The schema is created by numbered Go migrations in `internal/store`. No hand-written SQL.
 
@@ -68,6 +68,7 @@ Dependencies and constraints:
 - The window is a `QMainWindow`. The editor and the right column sit in a horizontal `QSplitter`, with the editor on the left. The right column is a vertical `QSplitter` with the issues list (section 4.3) on top and the explanation panel (section 4.4) below. Both splitter positions are remembered.
 - **Toolbar, row 1:** LLM selector (`QComboBox`), Check button, Auto-check checkbox (optional, **off by default**; the Check button always works), Statistics button (section 4.6), Preferences button. While a check is running, the Check button turns into a **Cancel** button (section 5.1).
 - **Toolbar, row 2:** New, Open, Save, Save As, Save to library, and Library (section 7).
+- **Keyboard:** `Ctrl+Return` presses Check (or Cancel while a check runs), `Ctrl+N`, `Ctrl+O`, `Ctrl+S` and `Ctrl+Shift+S` press New, Open, Save and Save As, and `F7` / `Shift+F7` move between issues (section 4.2). The tooltips of the buttons name their shortcut.
 - The LLM selector lists the configured LLMs by name. The last selection is remembered. If the list is empty, the selector is disabled, Check is disabled, and the explanation panel shows a markdown message that links to Preferences.
 - The status bar shows the issue count, the check state (idle, checking, cancelled, failed), the word count, and the input / output tokens of the last request and of the session (section 5.8).
 
@@ -150,6 +151,7 @@ A list of all the errors found by the last check sits at the top of the right co
 - **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).
 - The Add / Edit form is validated before it is saved (the messages come from `llm.ModelConfig.Validate`) and shows store errors such as a duplicate name without closing. Choosing `ollama` fills in `http://localhost:11434` if the Base URL is empty; switching away from `ollama` clears that default again, so an Anthropic or OpenAI-compatible configuration never inherits a localhost address. The API key field is disabled for `ollama`, and a key typed before switching to `ollama` is not stored.
 - **General tab:** auto-check on/off (default off), auto-check delay in seconds (default 3, used only when auto-check is on; the field is disabled while auto-check is off), editor font size. Changes apply and are saved at once; there is no OK button, only Close.
+- The Add / Edit form shows a privacy note, "the text you write is sent to <server> when you check it or ask for an explanation", unless the server is on this computer (the host is `localhost`, `127.x.x.x` or `::1`, or Ollama with its default address). For Anthropic with no base URL it names Anthropic's server.
 - Deleting the currently selected LLM selects another one (the first by name), or leaves the selector empty if none remain; the new choice is remembered.
 
 ### 4.6 Statistics dialog
@@ -442,6 +444,8 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 
 ## 12. Milestones
 
+All of these are implemented; docs/IMPLEMENTATION.md has the 16 steps they were built in and docs/IMPLEMENTED.md the log of what each step did.
+
 1. **Skeleton:** module, `config`, `logging`, `store` with `001_init`, wiring in `main.go`, empty main window.
 2. **Preferences:** LLM list CRUD dialog, selector in the toolbar, persisted selection, Test connection.
 3. **Analysis core:** `llm` factory, check prompt, parsing, locator, chunking (no UI), with tests.
@@ -457,5 +461,5 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 - **Statistics accuracy:** counts are only as good as the LLM. Different models may classify the same mistake differently, and false positives inflate counts. Mitigated by the fixed taxonomy, de-duplication and the Not an error button; switching models mid-way can still shift the counts between types.
 - **Qt 6 packaging:** building miqt needs Qt dev packages and a long first compile. Document it; no cross-platform packaging in v1.
 - **Plain-text API keys:** accepted for v1 (section 8). An OS keyring is a possible later change.
-- **Privacy:** the text is sent to the selected provider. The Preferences dialog should say so for non-local providers.
+- **Privacy:** the text is sent to the selected provider. The LLM form says so for servers that are not on this computer (section 4.5), and the README repeats it.
 - **Not decided yet:** language of the explanations (English only in v1; a "explain in my language" preference is a candidate for later), a retention limit for the library, and whether the category colours should become configurable.
