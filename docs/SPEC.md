@@ -137,9 +137,10 @@ A list of all the errors found by the last check sits at the top of the right co
   | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field |
   | Temperature | Optional, default 0.2 |
 
-- **Test connection** sends a tiny prompt and reports success or the failure reason. It never blocks the UI thread.
-- **General tab:** auto-check on/off (default off), auto-check delay in seconds (default 3, used only when auto-check is on), editor font size.
-- Deleting the currently selected LLM selects another one, or leaves the selector empty if none remain.
+- **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).
+- The Add / Edit form is validated before it is saved (the messages come from `llm.ModelConfig.Validate`) and shows store errors such as a duplicate name without closing. Choosing `ollama` fills in `http://localhost:11434` if the Base URL is empty; switching away from `ollama` clears that default again, so an Anthropic or OpenAI-compatible configuration never inherits a localhost address. The API key field is disabled for `ollama`, and a key typed before switching to `ollama` is not stored.
+- **General tab:** auto-check on/off (default off), auto-check delay in seconds (default 3, used only when auto-check is on; the field is disabled while auto-check is off), editor font size. Changes apply and are saved at once; there is no OK button, only Close.
+- Deleting the currently selected LLM selects another one (the first by name), or leaves the selector empty if none remain; the new choice is remembered.
 
 ### 4.6 Statistics dialog
 
