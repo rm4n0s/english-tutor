@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"io"
 	"slices"
 	"strings"
@@ -446,4 +447,24 @@ func TestUnrecordedIssueHeaderSaysItIsNotCounted(t *testing.T) {
 	h.waitIdle()
 	h.selectIssue(1)
 	h.waitFor("the header", func() bool { return strings.Contains(h.a.win.ExplanationHeader(), "not counted") })
+}
+
+func TestResettingStatisticsClearsTheBadges(t *testing.T) {
+	fake := checkThenExplain()
+	h := newHarness(t, fake)
+	h.checked(fake)
+	onUI(func() {
+		if !strings.Contains(h.a.win.IssueRowText(0), "<b>x1</b>") {
+			t.Fatalf("expected a badge before the reset:\n%s", h.a.win.IssueRowText(0))
+		}
+	})
+	if err := h.a.stats.ResetMistakes(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	onUI(func() {
+		h.a.onStatisticsReset()
+		if strings.Contains(h.a.win.IssueRowText(0), "<b>x") {
+			t.Errorf("the badge must go after the reset:\n%s", h.a.win.IssueRowText(0))
+		}
+	})
 }

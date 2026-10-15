@@ -164,3 +164,26 @@ func TestPreferencesButtonOpensTheDialog(t *testing.T) {
 		}
 	})
 }
+
+// TestStatisticsButtonOpensTheDialog presses the toolbar button and closes the
+// modal dialog from a timer that fires inside its event loop.
+func TestStatisticsButtonOpensTheDialog(t *testing.T) {
+	st := newStore(t)
+	withApp(t, st, func(a *App, _ *syncBuffer) {
+		opened := false
+		timer := qt.NewQTimer()
+		timer.SetSingleShot(true)
+		timer.OnTimeout(func() {
+			if w := qt.QApplication_ActiveModalWidget(); w != nil {
+				opened = w.WindowTitle() == "Statistics"
+				w.Close()
+			}
+		})
+		timer.Start(0)
+		a.win.StatisticsButtonClick()
+		timer.Delete()
+		if !opened {
+			t.Error("the Statistics button should open the modal Statistics dialog")
+		}
+	})
+}

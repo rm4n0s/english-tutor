@@ -637,3 +637,6 @@ func (w *MainWindow) ErrorText() string {
 	}
 	return w.bannerLabel.Text()
 }
+
+// StatisticsButtonClick presses the Statistics button.
+func (w *MainWindow) StatisticsButtonClick() { w.statsBtn.Click() }

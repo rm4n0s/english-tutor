@@ -108,6 +108,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		Check:            func() { a.startCheck(true) },
 		Cancel:           a.analyzer.Cancel,
 		Preferences:      a.openPreferences,
+		Statistics:       a.openStatistics,
 		LLMSelected:      a.onLLMSelected,
 		AutoCheckChanged: a.onAutoCheckChanged,
 		CategoryToggled:  a.state.SetCategoryVisible,
