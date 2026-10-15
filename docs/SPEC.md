@@ -48,7 +48,7 @@ Dependencies and constraints:
 ```
 +----------------------------------------------------------------------+
 | LLM: [ Claude Sonnet v ]  [Check]  [ ] Auto-check  [Stats] [Prefs]   |
-| [New] [Open] [Save] [Save As] [Save to library]                      |
+| [New] [Open] [Save] [Save As] [Save to library] [Library]            |
 | Legend:  ~~ grammar   -- vocabulary   .. syntax                      |
 +----------------------------------------+-----------------------------+
 |                                        | Issues (3)                  |
@@ -67,7 +67,7 @@ Dependencies and constraints:
 
 - The window is a `QMainWindow`. The editor and the right column sit in a horizontal `QSplitter`, with the editor on the left. The right column is a vertical `QSplitter` with the issues list (section 4.3) on top and the explanation panel (section 4.4) below. Both splitter positions are remembered.
 - **Toolbar, row 1:** LLM selector (`QComboBox`), Check button, Auto-check checkbox (optional, **off by default**; the Check button always works), Statistics button (section 4.6), Preferences button. While a check is running, the Check button turns into a **Cancel** button (section 5.1).
-- **Toolbar, row 2:** file and library buttons (section 7).
+- **Toolbar, row 2:** New, Open, Save, Save As, Save to library, and Library (section 7).
 - The LLM selector lists the configured LLMs by name. The last selection is remembered. If the list is empty, the selector is disabled, Check is disabled, and the explanation panel shows a markdown message that links to Preferences.
 - The status bar shows the issue count, the check state (idle, checking, cancelled, failed), the word count, and the input / output tokens of the last request and of the session (section 5.8).
 
@@ -332,6 +332,12 @@ Two independent mechanisms:
 **Library (SQLite)**
 - *Save to library* stores the current text as a document (title, content, timestamps). The title defaults to the first line, shortened to 60 characters, and can be edited.
 - A *Library* dialog lists saved documents sorted by last update, with Open, Rename and Delete. Opening a document loads it into the editor, which then tracks the library document it came from; the next *Save to library* updates that row instead of creating a new one.
+- Details of the implementation:
+  - **Opening a file** reads it before anything is replaced, so a file that cannot be opened (not found, not valid UTF-8, binary because it contains a NUL byte, or larger than 10 MB) leaves the current text alone and shows its message in the banner; only after a successful read is the user asked about unsaved changes. A leading byte order mark is dropped. The editor works with `\n`; if a file used `\r\n` that ending is remembered and written back on Save, so a Windows file stays a Windows file.
+  - **Writing** goes to a temporary file in the same folder that is renamed over the target, so a failure half way never damages the old file. An existing file keeps its permissions, a symbolic link stays a link, and a new file is `0644`. Save As adds `.txt` if the chosen name has no extension; its proposed name is the text's default title plus `.txt`.
+  - **Unsaved changes** are asked about, with Save, Discard and Cancel, before New, Open, opening from the library and closing the window. Save here means: the library if the text's current source is a library document, otherwise its file (Save As if it has none); if that save fails or is cancelled the action is cancelled too. Loading a text (New, Open, library) is not typing: it clears the issues, stops a running check or explanation, and does not start an auto-check.
+  - **Save to library** on a text that came from a file adds a new document (and moves the mistakes to it, section 5.7) while the text stays tied to its file, so Save still writes the file. Renaming a document in the Library updates the window title if it is the open one; deleting the open one detaches it, so the next Save to library creates a new document; saving to a document that was deleted meanwhile reports it and detaches it.
+  - If moving the recorded mistakes to a new source fails (Save As), the text still switches source and the failure is shown in the banner. A mistake recorded by a check that was still being saved when Save As happened can stay under the old source.
 - Issues (underlines) are not stored, so a loaded text must be checked again. Recorded mistakes (section 5.7) are stored; checking a loaded text again does not count them twice.
 
 ## 8. Data storage
@@ -403,8 +409,8 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `LLMCallFailed` | `analysis` | the request fails (network, auth, rate limit) |
 | `LLMCallTimeout` | `analysis` | the request exceeds its timeout |
 | `LLMResponseInvalid` | `analysis` | the reply is not valid JSON for the contract, even after one retry |
-| `FileReadFailed` / `FileWriteFailed` | `app` | file open or save fails |
-| `FileNotUTF8` | `app` | opened file is not valid UTF-8 |
+| `FileReadFailed` / `FileWriteFailed` | `app` | file open or save fails (also: file larger than 10 MB, application closing) |
+| `FileNotUTF8` | `app` | opened file is not valid UTF-8, or contains a NUL byte |
 
 - The check prompt is retried once with a "return valid JSON only" reminder before `LLMResponseInvalid` is returned. Code fences around the JSON are stripped before parsing.
 - The UI shows the `Message` of an error to the user in a non-modal banner and logs `appErr.ToJson()`.
