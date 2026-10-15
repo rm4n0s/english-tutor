@@ -131,7 +131,7 @@ func TestSetLLMs(t *testing.T) {
 
 func TestSetLLMsDoesNotOverwriteAnExplanation(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
-		w.ShowMarkdown("### What is wrong\nUse goes.")
+		w.SetExplanation(ExplainReady, "Verb form", "### What is wrong\nUse goes.")
 		w.SetLLMs(choices(), 3)
 		if got := w.explain.ToPlainText(); !strings.Contains(got, "Use goes.") {
 			t.Errorf("panel = %q: changing the LLM list must not replace an explanation", got)
@@ -296,7 +296,7 @@ func TestStatusAndTokens(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
 		w.SetStatus("3 issues | checking...")
 		w.SetTokens(llm.Usage{InputTokens: 812, OutputTokens: 164}, llm.Usage{InputTokens: 5234, OutputTokens: 1100})
-		w.SetIssuesEmpty("Issues (0)", "No errors found")
+		w.SetIssues("Issues (0)", nil, 0, "No errors found")
 		if w.stateLabel.Text() != "3 issues | checking..." {
 			t.Errorf("state = %q", w.stateLabel.Text())
 		}
@@ -304,7 +304,7 @@ func TestStatusAndTokens(t *testing.T) {
 			t.Errorf("tokens = %q", got)
 		}
 		if w.issuesList.Count() != 1 || w.issuesList.Item(0).Text() != "No errors found" {
-			t.Error("SetIssuesEmpty must replace the previous line")
+			t.Error("SetIssues must replace the previous line")
 		}
 	})
 }
@@ -324,13 +324,13 @@ func TestFontSize(t *testing.T) {
 
 func TestPreferencesLinkInTheNoLLMMessage(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
-		opened := 0
+		opened, asked := 0, 0
+		w.SetLinkActions(func(string) bool { asked++; return false }, func(string) {})
 		w.SetHandlers(Handlers{Preferences: func() { opened++ }})
 		w.explain.AnchorClicked(qt.NewQUrl3("preferences:"))
-		w.explain.AnchorClicked(qt.NewQUrl3("https://example.com/"))
 		w.explain.AnchorClicked(qt.NewQUrl3("file:///etc/passwd"))
-		if opened != 1 {
-			t.Errorf("Preferences opened %d times, want 1: only the preferences: link is followed", opened)
+		if opened != 1 || asked != 0 {
+			t.Errorf("Preferences opened %d times (want 1), %d confirmations (want 0): only the preferences: link is followed, and only in the hint", opened, asked)
 		}
 	})
 }

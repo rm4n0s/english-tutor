@@ -41,6 +41,14 @@ type Handlers struct {
 	// NextIssue and PrevIssue are F7 and Shift+F7.
 	NextIssue, PrevIssue func()
 
+	// IssueSelected is a click or an arrow key on a row of the issues list.
+	IssueSelected func(id int)
+	// IssueActivated is a double click on a row.
+	IssueActivated func(id int)
+	// NotAnError and Regenerate act on the selected issue; ExplainCancel stops
+	// a streaming explanation.
+	NotAnError, Regenerate, ExplainCancel func()
+
 	// CanClose is asked when the user closes the window; returning false keeps
 	// it open (for the unsaved-changes prompt).
 	CanClose func() bool
@@ -81,7 +89,18 @@ type MainWindow struct {
 	vSplit       *qt.QSplitter
 	issuesHeader *qt.QLabel
 	issuesList   *qt.QListWidget
-	explain      *qt.QTextBrowser
+	rowIDs       []int // issue ID of each list row; empty while the list shows its empty line
+	syncingList  bool  // true while the list is changed from code, so it reports nothing
+
+	explain       *qt.QTextBrowser
+	explainHeader *qt.QLabel
+	explainBar    *qt.QProgressBar
+	redoBtn       *qt.QPushButton
+	cancelBtn     *qt.QPushButton
+	notErrorBtn   *qt.QPushButton
+	explainState  ExplainState
+	confirmLink   func(url string) bool // asks before a link is opened; tests replace it
+	openLink      func(url string)      // opens a confirmed link; tests replace it
 
 	stateLabel  *qt.QLabel
 	wordsLabel  *qt.QLabel
@@ -95,7 +114,6 @@ type MainWindow struct {
 	prevShortcut *qt.QShortcut
 
 	checking      bool
-	showingHint   bool
 	fontSizePoint int
 }
 
@@ -109,7 +127,7 @@ func NewMainWindow() *MainWindow {
 	w.buildCentral()
 	w.buildStatusBar()
 	w.connect()
-	w.SetIssuesEmpty("Issues (0)", "Press Check to find errors")
+	w.SetIssues("Issues (0)", nil, 0, "Press Check to find errors")
 	w.SetLLMs(nil, 0) // disables the selector and Check
 	w.ShowHint()      // shows the no-LLM message
 	w.SetTokens(llm.Usage{}, llm.Usage{})
@@ -185,16 +203,17 @@ func (w *MainWindow) buildCentral() {
 	w.issuesHeader.SetStyleSheet("font-weight: bold;")
 	issuesLayout.AddWidget(w.issuesHeader.QWidget)
 	w.issuesList = qt.NewQListWidget2()
+	w.issuesList.SetContextMenuPolicy(qt.CustomContextMenu)
+	// A pale selection keeps the coloured marker and the grey second line of a
+	// row readable, which a solid highlight colour would not.
+	w.issuesList.SetStyleSheet("QListWidget::item:selected { background: rgba(127, 127, 127, 60); border-left: 3px solid palette(highlight); }")
 	issuesLayout.AddWidget(w.issuesList.QWidget)
 
-	w.explain = qt.NewQTextBrowser2()
-	// Links are never opened by Qt itself: they come from an LLM (section 5.9).
-	w.explain.SetOpenLinks(false)
-	w.explain.SetOpenExternalLinks(false)
+	explainPanel := w.buildExplainPanel()
 
 	w.vSplit = qt.NewQSplitter3(qt.Vertical)
 	w.vSplit.AddWidget(issues)
-	w.vSplit.AddWidget(w.explain.QWidget)
+	w.vSplit.AddWidget(explainPanel)
 	w.vSplit.SetStretchFactor(0, 1)
 	w.vSplit.SetStretchFactor(1, 2)
 	w.vSplit.SetChildrenCollapsible(false)
@@ -299,13 +318,7 @@ func (w *MainWindow) connect() {
 	w.nextShortcut.OnActivated(func() { call(w.handlers.NextIssue) })
 	w.prevShortcut = qt.NewQShortcut2(qt.NewQKeySequence2("Shift+F7"), w.win.QObject)
 	w.prevShortcut.OnActivated(func() { call(w.handlers.PrevIssue) })
-	w.explain.OnAnchorClicked(func(u *qt.QUrl) {
-		// Only the link of the no-LLM message is followed. Links in LLM
-		// explanations are handled with a confirmation in step 13.
-		if u.Scheme() == "preferences" {
-			call(w.handlers.Preferences)
-		}
-	})
+	w.connectPanel()
 	w.win.OnCloseEvent(func(super func(event *qt.QCloseEvent), event *qt.QCloseEvent) {
 		if w.handlers.CanClose != nil && !w.handlers.CanClose() {
 			event.Ignore()
@@ -365,7 +378,7 @@ func (w *MainWindow) SetLLMs(choices []LLMChoice, selected uint) {
 	if !empty {
 		w.llmCombo.SetCurrentIndex(current)
 	}
-	if w.showingHint {
+	if w.explainState == ExplainIdle {
 		w.ShowHint()
 	}
 }
@@ -426,16 +439,6 @@ func (w *MainWindow) updateWordCount() {
 	w.wordsLabel.SetText(FormatWords(analysis.WordCount(w.editor.ToPlainText())))
 }
 
-// SetIssuesEmpty shows the header and a single grey line in place of rows.
-func (w *MainWindow) SetIssuesEmpty(header, line string) {
-	w.issuesHeader.SetText(header)
-	w.issuesList.Clear()
-	w.issuesList.AddItem(line)
-	if item := w.issuesList.Item(0); item != nil {
-		item.SetFlags(qt.NoItemFlags)
-	}
-}
-
 // SetStatus sets the left part of the status bar (check state and counts).
 func (w *MainWindow) SetStatus(text string) { w.stateLabel.SetText(text) }
 
@@ -444,24 +447,8 @@ func (w *MainWindow) SetTokens(last, session llm.Usage) {
 	w.tokensLabel.SetText(FormatTokens(last, session))
 }
 
-// ShowMarkdown shows an explanation in the right panel.
-func (w *MainWindow) ShowMarkdown(md string) {
-	w.showingHint = false
-	w.explain.SetMarkdown(md)
-}
-
 // ShowHint shows the idle hint, or the no-LLM message if no LLM is configured.
-func (w *MainWindow) ShowHint() {
-	w.explain.SetMarkdown(w.hintText())
-	w.showingHint = true
-}
-
-func (w *MainWindow) hintText() string {
-	if len(w.llms) == 0 {
-		return hintNoLLM
-	}
-	return hintIdle
-}
+func (w *MainWindow) ShowHint() { w.SetExplanation(ExplainIdle, "", "") }
 
 // Geometry returns the window geometry in Qt's saved form.
 func (w *MainWindow) Geometry() []byte { return w.win.SaveGeometry() }

@@ -44,10 +44,27 @@ func newHarness(t *testing.T, fake *llmtest.Fake) *harness {
 		// Let background work finish (its results are posted to the UI thread
 		// first, and run before the window goes), then delete the window.
 		h.a.analyzer.Cancel()
-		h.a.Wait()
+		h.a.explainer.Cancel()
+		h.settle()
 		onUI(func() { h.a.win.Widget().Delete() })
 	})
 	return h
+}
+
+// settle waits until no background work is left, running the callbacks that
+// work posts to the UI thread: a callback can start more work (recording a check
+// refreshes the counts), so it repeats until a pass finds nothing running.
+func (h *harness) settle() {
+	for range 20 {
+		h.a.Wait()
+		onUI(func() {}) // runs the callbacks posted so far
+		h.a.bgMu.Lock()
+		idle := h.a.bgN == 0
+		h.a.bgMu.Unlock()
+		if idle {
+			return
+		}
+	}
 }
 
 func (h *harness) setText(text string) {

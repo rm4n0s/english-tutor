@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,13 +28,14 @@ import (
 // calls, statistics queries, saving documents) goes through goroutines in the
 // later steps (section 6 of the spec).
 type App struct {
-	ctx      context.Context
-	log      *slog.Logger
-	store    *store.Store
-	stats    *store.Stats
-	analyzer *analysis.Analyzer
-	win      *ui.MainWindow
-	state    *issues.State
+	ctx       context.Context
+	log       *slog.Logger
+	store     *store.Store
+	stats     *store.Stats
+	analyzer  *analysis.Analyzer
+	explainer *analysis.Explainer
+	win       *ui.MainWindow
+	state     *issues.State
 
 	// newModel builds the langchaingo model of a configured LLM. Tests replace
 	// it with a fake.
@@ -55,8 +57,22 @@ type App struct {
 	autoDelay time.Duration
 	autoTimer *qt.QTimer
 
-	// bg counts the goroutines started by goBackground.
-	bg sync.WaitGroup
+	// Explanation panel and issues list (UI thread only).
+	explainSeq     uint64 // number of the latest explanation started
+	explainBuf     strings.Builder
+	explainDirty   bool
+	explainHeader  string
+	renderTimer    *qt.QTimer
+	resultRecorded bool           // the issues of the current result are in the statistics
+	typeCounts     map[string]int // all-time mistakes per error type, for the row badges
+	lastCheckID    uint64
+
+	// bgN counts the goroutines started by goBackground. A mutex and a
+	// condition variable are used instead of a WaitGroup because goroutines are
+	// started from UI callbacks while another goroutine may be waiting.
+	bgMu   sync.Mutex
+	bgN    int
+	bgCond *sync.Cond
 }
 
 // New builds the window and loads the saved state into it. A setting that
@@ -65,14 +81,16 @@ type App struct {
 func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	stats := store.NewStats(st, nil)
 	a := &App{
-		ctx:       ctx,
-		log:       log,
-		store:     st,
-		stats:     stats,
-		analyzer:  analysis.NewAnalyzer(analysis.AnalyzerConfig{Usage: stats, Logger: log}),
-		win:       ui.NewMainWindow(),
-		state:     issues.New(),
-		sourceKey: newSessionKey(),
+		ctx:        ctx,
+		log:        log,
+		store:      st,
+		stats:      stats,
+		analyzer:   analysis.NewAnalyzer(analysis.AnalyzerConfig{Usage: stats, Logger: log}),
+		explainer:  analysis.NewExplainer(analysis.ExplainerConfig{Usage: stats, Logger: log}),
+		typeCounts: map[string]int{},
+		win:        ui.NewMainWindow(),
+		state:      issues.New(),
+		sourceKey:  newSessionKey(),
 		newModel: func(cfg store.LLMConfig) (llms.Model, error) {
 			return llm.New(cfg.ModelConfig())
 		},
@@ -81,6 +99,10 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	a.autoTimer = qt.NewQTimer()
 	a.autoTimer.SetSingleShot(true)
 	a.autoTimer.OnTimeout(a.onAutoCheckTimer)
+	a.bgCond = sync.NewCond(&a.bgMu)
+	a.renderTimer = qt.NewQTimer()
+	a.renderTimer.SetSingleShot(true)
+	a.renderTimer.OnTimeout(a.onRenderTimer)
 	a.state.Subscribe(a.onStateChange)
 	a.win.SetHandlers(ui.Handlers{
 		Check:            func() { a.startCheck(true) },
@@ -93,31 +115,54 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		TextEdited: func(pos, removed, added int) {
 			a.state.ApplyEdit(issues.Edit{Pos: pos, Removed: removed, Added: added})
 		},
-		CursorMoved: a.onCursorMoved,
-		TooltipAt:   a.tooltipAt,
-		NextIssue:   func() { a.stepIssue(a.state.Next) },
-		PrevIssue:   func() { a.stepIssue(a.state.Prev) },
-		Closed:      a.onClosed,
+		CursorMoved:    a.onCursorMoved,
+		TooltipAt:      a.tooltipAt,
+		IssueSelected:  func(id int) { a.state.Select(id) },
+		IssueActivated: a.onIssueActivated,
+		NotAnError:     a.onNotAnError,
+		Regenerate:     a.onRegenerate,
+		ExplainCancel:  a.explainer.Cancel,
+		NextIssue:      func() { a.stepIssue(a.state.Next) },
+		PrevIssue:      func() { a.stepIssue(a.state.Prev) },
+		Closed:         a.onClosed,
 	})
 	a.loadState()
 	a.refreshStatus()
+	a.refreshList()
 	return a
 }
 
 // goBackground runs f in a goroutine that Wait waits for. Goroutines must not
 // touch Qt; they post their result to the UI thread with mainthread.Start.
 func (a *App) goBackground(f func()) {
-	a.bg.Add(1)
+	a.bgMu.Lock()
+	a.bgN++
+	a.bgMu.Unlock()
 	go func() {
-		defer a.bg.Done()
+		defer func() {
+			a.bgMu.Lock()
+			a.bgN--
+			if a.bgN == 0 {
+				a.bgCond.Broadcast()
+			}
+			a.bgMu.Unlock()
+		}()
 		f()
 	}()
 }
 
 // Wait blocks until the background goroutines have ended, so that nothing
 // posts to the window after it is gone. Cancel the root context (and the
-// analyzer) first, and do not call it on the UI thread.
-func (a *App) Wait() { a.bg.Wait() }
+// analyzer) first, and do not call it on the UI thread. It does not run the
+// callbacks the goroutines posted; after the event loop has stopped they never
+// run, and in tests settle (see the test helpers) runs them.
+func (a *App) Wait() {
+	a.bgMu.Lock()
+	defer a.bgMu.Unlock()
+	for a.bgN > 0 {
+		a.bgCond.Wait()
+	}
+}
 
 // Show shows the main window.
 func (a *App) Show() { a.win.Show() }
@@ -199,7 +244,9 @@ func (a *App) loadAutoCheck() {
 
 func (a *App) onClosed() {
 	a.analyzer.Cancel()
+	a.explainer.Cancel()
 	a.autoTimer.Stop()
+	a.renderTimer.Stop()
 	a.saveWindowState()
 }
 

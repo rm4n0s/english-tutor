@@ -44,16 +44,10 @@ func (a *App) startCheck(manual bool) {
 		}
 		return
 	}
-	id := a.win.SelectedLLMID()
-	if id == 0 {
+	if a.win.SelectedLLMID() == 0 {
 		return
 	}
-	cfg, err := a.store.GetLLMConfig(a.ctx, id)
-	if err != nil {
-		a.checkFailed(err)
-		return
-	}
-	model, err := a.newModel(*cfg)
+	m, err := a.currentModel()
 	if err != nil {
 		a.checkFailed(err)
 		return
@@ -68,11 +62,23 @@ func (a *App) startCheck(manual bool) {
 	a.win.ClearError()
 	a.refreshStatus()
 
-	m := analysis.Model{Name: cfg.Name, LLM: model, Temperature: cfg.Temperature}
 	a.goBackground(func() {
 		res, err := a.analyzer.Check(a.ctx, m, text)
 		mainthread.Start(func() { a.finishCheck(seq, rev, manual, m.Name, text, res, err) })
 	})
+}
+
+// currentModel builds the model of the LLM selected in the window.
+func (a *App) currentModel() (analysis.Model, error) {
+	cfg, err := a.store.GetLLMConfig(a.ctx, a.win.SelectedLLMID())
+	if err != nil {
+		return analysis.Model{}, err
+	}
+	model, err := a.newModel(*cfg)
+	if err != nil {
+		return analysis.Model{}, err
+	}
+	return analysis.Model{Name: cfg.Name, LLM: model, Temperature: cfg.Temperature}, nil
 }
 
 // finishCheck runs on the UI thread when a check has ended.
@@ -95,6 +101,7 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, llmName, text str
 	default:
 		out := a.state.FinishCheck(rev, issues.FromPlaced(text, res.Placed))
 		a.unplaced = res.Unplaced
+		a.resultRecorded = manual
 		a.status = ui.StatusIdle
 		if out.Discarded {
 			a.status = ui.StatusDiscarded
@@ -147,6 +154,7 @@ func (a *App) recordMistakes(llmName, text string, placed []analysis.Placed) {
 				return
 			}
 			a.log.Info("mistakes recorded", "inserted", res.Inserted, "duplicates", res.Duplicates, "ignored", res.Ignored)
+			a.refreshCounts()
 		})
 	})
 }
@@ -176,10 +184,21 @@ func (a *App) onStateChange(c issues.Change) {
 		if sel, ok := a.state.Selected(); ok && !a.fromEditor {
 			a.win.MoveCursorTo(sel.Start)
 		}
+		a.onSelectionChanged()
 	case issues.IssuesChanged:
+		if a.lastCheckID != a.state.CheckID() {
+			// A new result: the keys of the cached explanations mean other
+			// issues now.
+			a.lastCheckID = a.state.CheckID()
+			a.explainer.Reset()
+		}
 		if !a.checking {
 			a.refreshStatus()
 		}
+	}
+	switch c.Kind {
+	case issues.IssuesChanged, issues.SelectionChanged, issues.VisibilityChanged, issues.PhaseChanged:
+		a.refreshList()
 	}
 }
 
