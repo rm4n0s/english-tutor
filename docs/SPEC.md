@@ -87,7 +87,9 @@ Dependencies and constraints:
 - The selected issue is drawn with a stronger highlight (a background of the category colour at about 20% opacity) in addition to the underline.
 - Hovering an underline shows a tooltip with the error type label, the issue's short message and the category.
 - A small legend (three coloured samples with their category names) sits above the editor, next to the toolbar, so the colours are explained on screen. Clicking a legend entry hides or shows the underlines of that category.
-- Keyboard: `F7` / `Shift+F7` jump to the next / previous issue.
+- Keyboard: `F7` / `Shift+F7` jump to the next / previous issue: from the selected issue, or with nothing selected from the text cursor (the first issue that starts after it, or before it for `Shift+F7`), wrapping around at the ends. Hidden categories are skipped. The text cursor is put at the start of the issue.
+- The tooltip reads `<error type label> · <Category>`, then the issue's short message on the next line (for example "Subject-verb agreement · Grammar" and "Use goes."). A hidden category has no tooltip. The position under the mouse is the nearest cursor position, so pointing at the right half of an issue's last character does not show its tooltip.
+- The cursor moving into an issue (by click or keys) selects it without moving the cursor; selecting an issue from elsewhere (the list, F7) moves the cursor to its start without taking keyboard focus from the widget that has it.
 - Editing invalidates issues (section 5.5).
 
 ### 4.3 Issues list
@@ -172,6 +174,8 @@ A list of all the errors found by the last check sits at the top of the right co
 5. If the document is still at the same revision, the UI replaces the underlines. If the user kept typing, the result is discarded (or rebased, see section 5.5).
 
 Only one check runs at a time. Starting a new check cancels the previous one through its `context.Context`.
+
+A check started with the Check button is *manual* and records its mistakes (section 5.7); one started by auto-check is not recorded. When auto-check is on, the debounce timer restarts on every edit; when it fires while a check is still running it waits for another pause instead of cancelling that check. The status bar shows `Ready`, `Checking...`, `Check cancelled`, `Check failed`, or after a check `N issues` / `No errors found`, with ` · N issues could not be placed` appended when the locator dropped some. A failed check shows its message in a dismissible banner above the editor (cleared when the next check starts) and keeps the old underlines. The "last request" tokens in the status bar are those of the whole check (all its chunks and retries); the session total adds them up.
 
 **Cancel:** while a check runs, the Check button becomes a Cancel button. Pressing it cancels the request's context. A cancelled check:
 - leaves the existing underlines and the recorded mistakes exactly as they were, and discards results from chunks that already finished;
