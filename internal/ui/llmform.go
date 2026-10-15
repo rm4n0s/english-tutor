@@ -25,6 +25,7 @@ type LLMForm struct {
 	provider                     *qt.QComboBox
 	temperature                  *qt.QDoubleSpinBox
 	providerNote                 *qt.QLabel
+	privacyNote                  *qt.QLabel
 	message                      *qt.QLabel
 	testResult                   *qt.QLabel
 	saveBtn                      *qt.QPushButton
@@ -66,6 +67,11 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 	f.providerNote = qt.NewQLabel3("")
 	f.providerNote.SetWordWrap(true)
 	form.AddRow3("", f.providerNote.QWidget)
+
+	f.privacyNote = qt.NewQLabel3("")
+	f.privacyNote.SetWordWrap(true)
+	f.privacyNote.SetStyleSheet("font-style: italic;")
+	form.AddRow3("", f.privacyNote.QWidget)
 
 	f.model = qt.NewQLineEdit2()
 	f.model.SetPlaceholderText("for example llama3.1, gpt-4o or claude-sonnet-5-5")
@@ -109,6 +115,7 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 
 	f.fill(cfg)
 	f.provider.OnCurrentTextChanged(func(string) { f.providerChanged() })
+	f.baseURL.OnTextChanged(func(string) { f.updatePrivacyNote() })
 	f.saveBtn.OnClicked(f.save)
 	f.testBtn.OnClicked(f.test)
 	cancel.OnClicked(f.dlg.Reject)
@@ -157,6 +164,15 @@ func (f *LLMForm) providerChanged() {
 		// another provider's configuration.
 		f.baseURL.SetText("")
 	}
+	f.updatePrivacyNote()
+}
+
+// updatePrivacyNote shows or hides the note about sending text to a server on
+// the internet.
+func (f *LLMForm) updatePrivacyNote() {
+	note := PrivacyNote(f.provider.CurrentText(), f.baseURL.Text())
+	f.privacyNote.SetText(note)
+	f.privacyNote.SetVisible(note != "")
 }
 
 // Config returns the configuration the form currently describes. Fields the

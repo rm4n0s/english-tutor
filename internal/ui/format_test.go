@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rm4n0s/english-tutor/internal/llm"
@@ -88,6 +89,43 @@ func TestFormatStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := FormatStatus(tt.status, tt.checked, tt.issues, tt.unplaced); got != tt.want {
 				t.Errorf("FormatStatus() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrivacyNote(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		url      string
+		want     string // "" means no note; otherwise the note must contain it
+	}{
+		{"ollama default", "ollama", "", ""},
+		{"ollama on this machine", "ollama", "http://localhost:11434", ""},
+		{"loopback address", "openai-compatible", "http://127.0.0.1:1234/v1", ""},
+		{"loopback range", "openai-compatible", "http://127.0.1.1:1234/v1", ""},
+		{"ipv6 loopback", "openai-compatible", "http://[::1]:8080/v1", ""},
+		{"localhost subdomain", "openai-compatible", "http://llm.localhost:8080", ""},
+		{"ollama on another machine", "ollama", "http://gpu-box.lan:11434", "gpu-box.lan"},
+		{"openai-compatible on the internet", "openai-compatible", "https://api.openai.com/v1", "api.openai.com"},
+		{"host case is ignored", "openai-compatible", "https://API.Example.com", "api.example.com"},
+		{"anthropic default", "anthropic", "", "Anthropic's server"},
+		{"anthropic through a proxy", "anthropic", "https://proxy.example.com", "proxy.example.com"},
+		{"openai-compatible without a url yet", "openai-compatible", "", "the server of this LLM"},
+		{"unparsable url", "openai-compatible", "http://a b", "the server of this LLM"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PrivacyNote(tt.provider, tt.url)
+			if tt.want == "" {
+				if got != "" {
+					t.Errorf("PrivacyNote() = %q, want none", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tt.want) || !strings.HasPrefix(got, "Privacy:") || !strings.Contains(got, "sent to") {
+				t.Errorf("PrivacyNote() = %q, want it to say the text is sent to %q", got, tt.want)
 			}
 		})
 	}

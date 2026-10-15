@@ -109,6 +109,14 @@ func (b *fakeBackend) SetGeneral(_ context.Context, g General) error {
 	return nil
 }
 
+// testedConfigs returns the configurations TestLLM was called with. It takes the
+// lock because TestLLM runs in a goroutine.
+func (b *fakeBackend) testedConfigs() []store.LLMConfig {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.tested)
+}
+
 func ollamaCfg(id uint, name string) store.LLMConfig {
 	return store.LLMConfig{ID: id, Name: name, Provider: "ollama", Model: "llama3.1", BaseURL: "http://localhost:11434", Temperature: 0.2}
 }
@@ -493,8 +501,8 @@ func TestTestConnectionFromTheList(t *testing.T) {
 			})
 			waitLabel(t, func() string { return d.testResult.Text() }, tt.want)
 			uitest.OnUI(func() { d.dlg.Delete() })
-			if len(b.tested) != 1 || b.tested[0].Name != "local" {
-				t.Errorf("tested = %+v", b.tested)
+			if len(b.testedConfigs()) != 1 || b.testedConfigs()[0].Name != "local" {
+				t.Errorf("tested = %+v", b.testedConfigs())
 			}
 		})
 	}
@@ -553,8 +561,8 @@ func TestFormTestConnection(t *testing.T) {
 		_ = f
 	})
 	time.Sleep(20 * time.Millisecond)
-	if len(b.tested) != 1 || b.tested[0].Name != "this LLM" || b.tested[0].Model != "llama3.1" {
-		t.Errorf("tested = %+v: the form's current values are tested, with a placeholder name", b.tested)
+	if len(b.testedConfigs()) != 1 || b.testedConfigs()[0].Name != "this LLM" || b.testedConfigs()[0].Model != "llama3.1" {
+		t.Errorf("tested = %+v: the form's current values are tested, with a placeholder name", b.testedConfigs())
 	}
 }
 
@@ -570,7 +578,7 @@ func TestFormTestConnectionNeedsAValidForm(t *testing.T) {
 			f.dlg.Reject()
 		}
 		d.addBtn.Click()
-		if len(b.tested) != 0 {
+		if len(b.testedConfigs()) != 0 {
 			t.Error("an invalid form must not be tested")
 		}
 	})
@@ -595,4 +603,29 @@ func TestFormatTestResult(t *testing.T) {
 			t.Errorf("%s: formatTestResult() = %q, %v; want %q, %v", tt.name, got, ok, tt.want, tt.wantOK)
 		}
 	}
+}
+
+func TestFormShowsThePrivacyNoteForRemoteServers(t *testing.T) {
+	withPrefs(t, newFakeBackend(), func(d *PreferencesDialog, _ *hookLog) {
+		d.execForm = func(f *LLMForm) {
+			if !f.privacyNote.IsHidden() {
+				t.Errorf("a local Ollama server needs no note, got %q", f.privacyNote.Text())
+			}
+			f.provider.SetCurrentIndex(indexOfProvider("anthropic"))
+			if f.privacyNote.IsHidden() || !strings.Contains(f.privacyNote.Text(), "Anthropic's server") {
+				t.Errorf("Anthropic: %q (hidden %v)", f.privacyNote.Text(), f.privacyNote.IsHidden())
+			}
+			f.provider.SetCurrentIndex(indexOfProvider("openai-compatible"))
+			f.baseURL.SetText("http://localhost:1234/v1")
+			if !f.privacyNote.IsHidden() {
+				t.Errorf("a local OpenAI-compatible server needs no note, got %q", f.privacyNote.Text())
+			}
+			f.baseURL.SetText("https://api.openai.com/v1")
+			if f.privacyNote.IsHidden() || !strings.Contains(f.privacyNote.Text(), "api.openai.com") {
+				t.Errorf("remote server: %q (hidden %v)", f.privacyNote.Text(), f.privacyNote.IsHidden())
+			}
+			f.dlg.Reject()
+		}
+		d.addBtn.Click()
+	})
 }

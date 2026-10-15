@@ -72,6 +72,17 @@ const (
 // legendOrder is the order of the legend entries (section 4.1).
 var legendOrder = []analysis.Category{analysis.Grammar, analysis.Vocabulary, analysis.Syntax}
 
+// fileShortcuts are the keyboard shortcuts of the toolbar buttons that have one.
+var fileShortcuts = map[string]string{
+	"New":     "Ctrl+N",
+	"Open":    "Ctrl+O",
+	"Save":    "Ctrl+S",
+	"Save As": "Ctrl+Shift+S",
+}
+
+// checkShortcut presses the Check (or Cancel) button.
+const checkShortcut = "Ctrl+Return"
+
 // MainWindow is the application's main window (section 4.1). It holds widgets
 // and reports user actions through Handlers; it contains no application logic.
 type MainWindow struct {
@@ -116,6 +127,7 @@ type MainWindow struct {
 	underlines   []Underline
 	nextShortcut *qt.QShortcut
 	prevShortcut *qt.QShortcut
+	shortcuts    []*qt.QShortcut
 
 	checking      bool
 	fontSizePoint int
@@ -147,7 +159,7 @@ func (w *MainWindow) buildToolbars() {
 	w.llmCombo.SetMinimumContentsLength(18)
 	row1.AddWidget(w.llmCombo.QWidget)
 	w.checkBtn = qt.NewQPushButton3("Check")
-	w.checkBtn.SetToolTip("Find errors in the text (a check always runs when you press this)")
+	w.checkBtn.SetToolTip("Find errors in the text, or cancel the running check (" + checkShortcut + ")")
 	row1.AddWidget(w.checkBtn.QWidget)
 	w.autoCheck = qt.NewQCheckBox3("Auto-check")
 	w.autoCheck.SetToolTip("Check again automatically when you pause typing. Off by default.")
@@ -163,6 +175,9 @@ func (w *MainWindow) buildToolbars() {
 	row2.SetMovable(false)
 	for _, name := range []string{"New", "Open", "Save", "Save As", "Save to library", "Library"} {
 		b := qt.NewQPushButton3(name)
+		if keys, ok := fileShortcuts[name]; ok {
+			b.SetToolTip(name + " (" + keys + ")")
+		}
 		w.fileBtns = append(w.fileBtns, b)
 		row2.AddWidget(b.QWidget)
 	}
@@ -324,6 +339,7 @@ func (w *MainWindow) connect() {
 	})
 	w.editor.Viewport().SetMouseTracking(true)
 	w.editor.OnViewportEvent(w.viewportEvent)
+	w.addShortcuts()
 	w.nextShortcut = qt.NewQShortcut2(qt.NewQKeySequence2("F7"), w.win.QObject)
 	w.nextShortcut.OnActivated(func() { call(w.handlers.NextIssue) })
 	w.prevShortcut = qt.NewQShortcut2(qt.NewQKeySequence2("Shift+F7"), w.win.QObject)
@@ -673,4 +689,38 @@ func (w *MainWindow) LoadText(text string) {
 	w.editor.Document().ClearUndoRedoStacks()
 	w.SetModified(false)
 	w.MoveCursorTo(0)
+}
+
+// addShortcuts creates the shortcuts that press the toolbar buttons.
+func (w *MainWindow) addShortcuts() {
+	press := map[string]*qt.QPushButton{checkShortcut: w.checkBtn}
+	for i, name := range []string{"New", "Open", "Save", "Save As"} {
+		press[fileShortcuts[name]] = w.fileBtns[i]
+	}
+	for keys, button := range press {
+		sc := qt.NewQShortcut2(qt.NewQKeySequence2(keys), w.win.QObject)
+		sc.OnActivated(func() { button.Click() })
+		w.shortcuts = append(w.shortcuts, sc)
+	}
+}
+
+// ShortcutKeys returns the key sequences of the shortcuts that press buttons.
+func (w *MainWindow) ShortcutKeys() []string {
+	var out []string
+	for _, sc := range w.shortcuts {
+		out = append(out, sc.Key().ToString())
+	}
+	return out
+}
+
+// ActivateShortcut triggers the shortcut with the given key sequence, as the
+// user pressing it would. It reports whether there is one.
+func (w *MainWindow) ActivateShortcut(keys string) bool {
+	for _, sc := range w.shortcuts {
+		if sc.Key().ToString() == keys {
+			sc.Activated()
+			return true
+		}
+	}
+	return false
 }

@@ -410,3 +410,44 @@ func TestCloseHandlers(t *testing.T) {
 		}
 	})
 }
+
+func TestButtonShortcuts(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		var calls []string
+		rec := func(name string) func() { return func() { calls = append(calls, name) } }
+		w.SetHandlers(Handlers{
+			Check: rec("check"), Cancel: rec("cancel"),
+			New: rec("new"), Open: rec("open"), Save: rec("save"), SaveAs: rec("saveas"), SaveToLibrary: rec("savelibrary"), Library: rec("library"),
+		})
+		w.SetLLMs(choices(), 3)
+
+		for _, keys := range []string{"Ctrl+Return", "Ctrl+N", "Ctrl+O", "Ctrl+S", "Ctrl+Shift+S"} {
+			if !w.ActivateShortcut(keys) {
+				t.Errorf("no shortcut %s", keys)
+			}
+		}
+		if w.ActivateShortcut("Ctrl+L") || w.ActivateShortcut("") {
+			t.Error("unknown key sequences must not activate anything")
+		}
+		w.SetChecking(true)
+		w.ActivateShortcut("Ctrl+Return") // the same key cancels a running check
+		want := []string{"check", "new", "open", "save", "saveas", "cancel"}
+		if !slices.Equal(calls, want) {
+			t.Errorf("calls = %v, want %v", calls, want)
+		}
+
+		keys := w.ShortcutKeys()
+		slices.Sort(keys)
+		if !slices.Equal(keys, []string{"Ctrl+N", "Ctrl+O", "Ctrl+Return", "Ctrl+S", "Ctrl+Shift+S"}) {
+			t.Errorf("shortcuts = %v", keys)
+		}
+		for i, name := range []string{"New", "Open", "Save", "Save As"} {
+			if tip := w.fileBtns[i].ToolTip(); !strings.HasPrefix(tip, name+" (Ctrl+") {
+				t.Errorf("the %s button's tooltip should name its shortcut: %q", name, tip)
+			}
+		}
+		if tip := w.checkBtn.ToolTip(); !strings.Contains(tip, "Ctrl+Return") {
+			t.Errorf("check tooltip = %q", tip)
+		}
+	})
+}

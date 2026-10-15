@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/rm4n0s/english-tutor/internal/llm"
 )
@@ -90,4 +92,35 @@ func FormatStatus(s CheckStatus, checked bool, issues, unplaced int) string {
 		text += fmt.Sprintf(" · %d issues could not be placed", unplaced)
 	}
 	return text
+}
+
+// PrivacyNote is shown in the LLM form for a provider whose server is not on this
+// machine: the text of every check and every explanation is sent to it
+// (section 13 of the spec). It returns "" for a server on this computer.
+func PrivacyNote(provider, baseURL string) string {
+	host := ""
+	if u, err := url.Parse(strings.TrimSpace(baseURL)); err == nil {
+		host = strings.ToLower(u.Hostname())
+	}
+	switch {
+	case host == "" && provider == "ollama":
+		return "" // Ollama's default is this computer
+	case isLocalHost(host):
+		return ""
+	}
+	server := "the server of this LLM"
+	if host != "" {
+		server = host
+	} else if provider == "anthropic" {
+		server = "Anthropic's server"
+	}
+	return "Privacy: the text you write is sent to " + server + " when you check it or ask for an explanation."
+}
+
+func isLocalHost(host string) bool {
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "0.0.0.0":
+		return true
+	}
+	return strings.HasSuffix(host, ".localhost") || strings.HasPrefix(host, "127.")
 }
