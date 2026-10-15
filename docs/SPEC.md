@@ -237,6 +237,8 @@ The editor listens to `contentsChange(position, removed, added)`.
 - Edits fully before an issue shift its range by the net length change.
 - Edits that touch or fall inside an issue remove that issue's underline and its list row immediately.
 - Edits after an issue leave it untouched.
+- "Touch" includes adjacent edits: an edit whose range ends at or after the issue's start and starts at or before its end removes the issue (typing right after a word changes that word). Only edits that end strictly before the issue's start shift it, and only edits that start strictly after its end leave it alone. The editor reports UTF-16 positions, and `internal/issues` works in UTF-16 units throughout (`issues.FromPlaced` converts the analysis package's byte offsets once).
+- The edits made while a check runs are logged (at most 100,000) with the revision the check started at. When the result arrives, its issues are rebased across that log in order, and the ones an edit touched are dropped. A result of a check that is no longer the pending one is ignored. If the log overflowed, the result is discarded and the old issues stay. Aborting a check (cancel or failure) leaves the old issues untouched.
 - A result arriving for an older revision is rebased across the recorded edits, or discarded if rebasing is not possible.
 
 Auto-check is optional and off by default (stored as `auto_check = false` when the setting is missing). With it off, no check ever runs except when the user presses Check. With auto-check on, a debounce timer restarts on every edit and triggers a check when the user has paused for the configured delay.
@@ -349,11 +351,12 @@ internal/logging/         slog setup, size-rotated log file in ~/.english-tutor/
 internal/store/           gorm models, numbered migrations, Store
 internal/llm/             Provider enum, ModelConfig -> langchaingo llms.Model factory, token usage extraction
 internal/analysis/        prompts, response parsing, issue locating, chunking, error type taxonomy
+internal/issues/          issue state: placed issues, shared selection, category visibility, edit rebasing (no Qt)
 internal/ui/              main window, editor, issues list, explanation panel, dialogs
 internal/app/             application service tying store, llm and analysis to the UI
 ```
 
-- `internal/analysis` and `internal/llm` do not import miqt, so they can be tested without a display.
+- `internal/analysis`, `internal/issues` and `internal/llm` do not import miqt, so they can be tested without a display.
 - The UI depends on small interfaces (`Analyzer`, `Explainer`, `ConfigStore`, `DocumentStore`) implemented by `internal/app`, so UI code can be driven by fakes.
 
 ## 10. Error handling
