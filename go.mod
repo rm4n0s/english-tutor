@@ -3,6 +3,7 @@ module github.com/rm4n0s/english-tutor
 go 1.27.0
 
 require (
+	github.com/mappu/miqt v0.15.0
 	github.com/rm4n0s/errors v0.0.0-20260824195921-8423e20ff67e
 	github.com/tmc/langchaingo v0.1.15
 	gorm.io/driver/sqlite v1.6.0

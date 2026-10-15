@@ -170,6 +170,9 @@ func splitWords(text string, s seg, maxWords int) []seg {
 	return append(out, seg{start, s.end})
 }
 
+// WordCount returns the number of words in s: runs of non-space characters.
+func WordCount(s string) int { return countWords(s) }
+
 func countWords(s string) int {
 	n := 0
 	inWord := false
