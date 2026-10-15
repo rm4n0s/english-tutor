@@ -328,7 +328,7 @@ Tables (created by numbered migrations, `001_init` first):
 
 `error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`.
 
-Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`.
+Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry.
 
 API keys are stored in plain text in the database file. The `0600` permissions are the only protection. The Preferences dialog states this next to the API key field. Keys are never written to logs, error metadata or error messages.
 
@@ -366,6 +366,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `LLMConfigInvalid` | `store`/`llm` | missing model, base URL or key for the provider |
 | `LLMConfigNotFound` | `store` | selected LLM id does not exist |
 | `DocumentNotFound` | `store` | library document id does not exist |
+| `DatabaseQueryFailed` | `store` | any other query on the configs, documents or settings tables fails |
 | `ErrorEventSaveFailed` | `store` | recording mistakes after a check fails (the underlines are still shown) |
 | `StatsQueryFailed` | `store` | reading counts for the panel header or the Statistics dialog fails |
 | `StatsResetFailed` | `store` | Reset statistics or Not an error fails to delete |
