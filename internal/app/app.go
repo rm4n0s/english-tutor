@@ -41,8 +41,11 @@ type App struct {
 	// it with a fake.
 	newModel func(cfg store.LLMConfig) (llms.Model, error)
 
-	// sourceKey identifies the text for the statistics (section 5.7).
+	// sourceKey identifies the text for the statistics (section 5.7); place says
+	// where the text came from or was saved to.
 	sourceKey string
+	place     place
+	dialogs   Dialogs
 
 	// The fields below belong to the UI thread.
 	checkSeq     uint64 // number of the latest check started
@@ -99,6 +102,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	a.autoTimer = qt.NewQTimer()
 	a.autoTimer.SetSingleShot(true)
 	a.autoTimer.OnTimeout(a.onAutoCheckTimer)
+	a.dialogs = qtDialogs{a: a}
 	a.bgCond = sync.NewCond(&a.bgMu)
 	a.renderTimer = qt.NewQTimer()
 	a.renderTimer.SetSingleShot(true)
@@ -108,6 +112,14 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		Check:            func() { a.startCheck(true) },
 		Cancel:           a.analyzer.Cancel,
 		Preferences:      a.openPreferences,
+		New:              a.onNew,
+		Open:             a.onOpen,
+		Save:             a.onSave,
+		SaveAs:           a.onSaveAs,
+		SaveToLibrary:    a.onSaveToLibrary,
+		Library:          a.onLibrary,
+		CanClose:         a.canClose,
+		ModifiedChanged:  func(bool) { a.updateTitle() },
 		Statistics:       a.openStatistics,
 		LLMSelected:      a.onLLMSelected,
 		AutoCheckChanged: a.onAutoCheckChanged,
@@ -130,6 +142,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	a.loadState()
 	a.refreshStatus()
 	a.refreshList()
+	a.updateTitle()
 	return a
 }
 

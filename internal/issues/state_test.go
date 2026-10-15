@@ -483,3 +483,49 @@ func TestFromPlaced(t *testing.T) {
 		t.Errorf("fingerprint = %q, want the one computed from the byte offsets %q", got[0].Fingerprint, want)
 	}
 }
+
+func TestReset(t *testing.T) {
+	s := checked(t, threeItems())
+	s.Select(2)
+	s.SetCategoryVisible(analysis.Syntax, false)
+	checkID := s.CheckID()
+	rec := &recorder{}
+	s.Subscribe(rec.observe)
+
+	s.Reset()
+	if len(s.Items()) != 0 || s.Phase() != NotChecked || s.EmptyText() != "Press Check to find errors" {
+		t.Errorf("items %d, phase %v, empty text %q", len(s.Items()), s.Phase(), s.EmptyText())
+	}
+	if _, ok := s.Selected(); ok {
+		t.Error("the selection must go")
+	}
+	if s.CheckID() == checkID {
+		t.Error("CheckID must change, so cached explanations of the old text are not reused")
+	}
+	if s.CategoryVisible(analysis.Syntax) {
+		t.Error("the user's choice of hidden categories is kept")
+	}
+	if !slices.Equal(rec.kinds(), []ChangeKind{PhaseChanged, IssuesChanged, SelectionChanged}) {
+		t.Errorf("changes = %v", rec.kinds())
+	}
+	if len(rec.changes[1].RemovedIDs) != 3 {
+		t.Errorf("removed IDs = %v", rec.changes[1].RemovedIDs)
+	}
+}
+
+func TestResetDropsAPendingCheck(t *testing.T) {
+	s := New()
+	rev := s.BeginCheck()
+	s.Reset()
+	if out := s.FinishCheck(rev, threeItems()); !out.Stale {
+		t.Errorf("a result for the text before the reset is stale: %+v", out)
+	}
+	if len(s.Items()) != 0 || s.Phase() != NotChecked {
+		t.Error("a stale result must change nothing")
+	}
+	// A fresh check works afterwards.
+	rev = s.BeginCheck()
+	if out := s.FinishCheck(rev, threeItems()); out.Shown != 3 {
+		t.Errorf("outcome = %+v", out)
+	}
+}

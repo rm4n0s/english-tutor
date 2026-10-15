@@ -199,14 +199,14 @@ func TestToolbarHandlers(t *testing.T) {
 		rec := func(name string) func() { return func() { calls = append(calls, name) } }
 		w.SetHandlers(Handlers{
 			Statistics: rec("stats"), Preferences: rec("prefs"),
-			New: rec("new"), Open: rec("open"), Save: rec("save"), SaveAs: rec("saveas"), SaveToLibrary: rec("library"),
+			New: rec("new"), Open: rec("open"), Save: rec("save"), SaveAs: rec("saveas"), SaveToLibrary: rec("savelibrary"), Library: rec("library"),
 		})
 		w.statsBtn.Click()
 		w.prefsBtn.Click()
 		for _, b := range w.fileBtns {
 			b.Click()
 		}
-		want := []string{"stats", "prefs", "new", "open", "save", "saveas", "library"}
+		want := []string{"stats", "prefs", "new", "open", "save", "saveas", "savelibrary", "library"}
 		if !slices.Equal(calls, want) {
 			t.Errorf("calls = %v, want %v", calls, want)
 		}
@@ -214,7 +214,7 @@ func TestToolbarHandlers(t *testing.T) {
 		for _, b := range w.fileBtns {
 			names = append(names, b.Text())
 		}
-		if !slices.Equal(names, []string{"New", "Open", "Save", "Save As", "Save to library"}) {
+		if !slices.Equal(names, []string{"New", "Open", "Save", "Save As", "Save to library", "Library"}) {
 			t.Errorf("file buttons = %v", names)
 		}
 	})

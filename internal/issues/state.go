@@ -318,6 +318,28 @@ func (s *State) ApplyEdit(e Edit) {
 	}
 }
 
+// Reset forgets everything about the previous text: the issues, the selection,
+// the phase (back to "not checked") and any pending check. It is for a new or a
+// freshly opened text. Category visibility, which the user chose, is kept.
+func (s *State) Reset() {
+	removed := make([]int, 0, len(s.items))
+	for _, it := range s.items {
+		removed = append(removed, it.ID)
+	}
+	hadSelection := s.selected != 0
+	s.items = nil
+	s.selected = 0
+	s.endPending()
+	s.checkID++
+	s.phase = NotChecked
+	s.beforeCheck = NotChecked
+	s.notify(Change{Kind: PhaseChanged})
+	s.notify(Change{Kind: IssuesChanged, RemovedIDs: removed})
+	if hadSelection {
+		s.notify(Change{Kind: SelectionChanged})
+	}
+}
+
 // Remove deletes one issue (the "Not an error" action). It reports whether the
 // issue existed.
 func (s *State) Remove(id int) bool {

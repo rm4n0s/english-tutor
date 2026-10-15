@@ -24,6 +24,7 @@ type Handlers struct {
 	New, Open        func()
 	Save, SaveAs     func()
 	SaveToLibrary    func()
+	Library          func()
 	AutoCheckChanged func(on bool)
 	LLMSelected      func(id uint)
 	CategoryToggled  func(c analysis.Category, visible bool)
@@ -40,6 +41,9 @@ type Handlers struct {
 	TooltipAt func(pos int) string
 	// NextIssue and PrevIssue are F7 and Shift+F7.
 	NextIssue, PrevIssue func()
+
+	// ModifiedChanged reports when the text becomes modified or is marked saved.
+	ModifiedChanged func(modified bool)
 
 	// IssueSelected is a click or an arrow key on a row of the issues list.
 	IssueSelected func(id int)
@@ -157,7 +161,7 @@ func (w *MainWindow) buildToolbars() {
 	w.win.AddToolBarBreak()
 	row2 := w.win.AddToolBarWithTitle("Files")
 	row2.SetMovable(false)
-	for _, name := range []string{"New", "Open", "Save", "Save As", "Save to library"} {
+	for _, name := range []string{"New", "Open", "Save", "Save As", "Save to library", "Library"} {
 		b := qt.NewQPushButton3(name)
 		w.fileBtns = append(w.fileBtns, b)
 		row2.AddWidget(b.QWidget)
@@ -278,6 +282,7 @@ func (w *MainWindow) connect() {
 		func() func() { return w.handlers.Save },
 		func() func() { return w.handlers.SaveAs },
 		func() func() { return w.handlers.SaveToLibrary },
+		func() func() { return w.handlers.Library },
 	} {
 		w.fileBtns[i].OnClicked(func() { call(f()) })
 	}
@@ -305,6 +310,11 @@ func (w *MainWindow) connect() {
 	w.editor.Document().OnContentsChange(func(pos, removed, added int) {
 		if w.handlers.TextEdited != nil {
 			w.handlers.TextEdited(pos, removed, added)
+		}
+	})
+	w.editor.Document().OnModificationChanged(func(m bool) {
+		if w.handlers.ModifiedChanged != nil {
+			w.handlers.ModifiedChanged(m)
 		}
 	})
 	w.editor.OnCursorPositionChanged(func() {
@@ -640,3 +650,27 @@ func (w *MainWindow) ErrorText() string {
 
 // StatisticsButtonClick presses the Statistics button.
 func (w *MainWindow) StatisticsButtonClick() { w.statsBtn.Click() }
+
+// Modified reports whether the text has changed since it was loaded or saved.
+func (w *MainWindow) Modified() bool { return w.editor.Document().IsModified() }
+
+// SetModified marks the text as changed or as saved, without changing it.
+func (w *MainWindow) SetModified(modified bool) {
+	w.editor.Document().SetModifiedWithBool(modified)
+}
+
+// ClearEditor empties the editor and marks it as saved. The issue state sees
+// the change like any other edit.
+func (w *MainWindow) ClearEditor() {
+	w.editor.Clear()
+	w.SetModified(false)
+}
+
+// LoadText replaces the text of the editor with text loaded from somewhere and
+// marks it as saved, with the cursor at the start and the undo history empty.
+func (w *MainWindow) LoadText(text string) {
+	w.editor.SetPlainText(text)
+	w.editor.Document().ClearUndoRedoStacks()
+	w.SetModified(false)
+	w.MoveCursorTo(0)
+}
