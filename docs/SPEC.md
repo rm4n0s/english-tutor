@@ -206,17 +206,17 @@ LLMs are unreliable at counting character offsets, so the model is never asked f
 
 Parsing is tolerant about packaging and strict about content: markdown fences and prose around the JSON are ignored, and a reply that is just a JSON array of issues is accepted, but the JSON must contain an `issues` list (an object without it, `null` or text is invalid). Entries without `text` are dropped and counted. `message` is cut at 300 characters, the contexts at 200, and a snippet over 2000 characters is dropped, so a model that ignores the contract cannot flood the UI. An empty `message` falls back to the label of the error type. The reply is never put in error metadata or logs.
 
-The prompt and the response structs live in `internal/analysis`. For long texts the app splits the input into chunks at paragraph boundaries (target at most about 2000 words per request), runs the chunks sequentially, and merges the results with offsets shifted by chunk start.
+The prompt and the response structs live in `internal/analysis`. For long texts the app splits the input into chunks (at most 2000 words per request) with `analysis.SplitChunks`: a chunk ends at a paragraph boundary (blank line) where possible; a paragraph over the limit is cut between sentences, and a sentence over the limit between words. The chunks are contiguous and cover the whole text, whitespace stays with the text before it, and a text with no words gives no chunks. The app runs the chunks sequentially, locates each chunk's issues in the chunk's own text, and merges the results with offsets shifted by the chunk start (`LocateResult.Append`).
 
 ### 5.3 Locating issues
 
 For each returned issue:
 1. Find all occurrences of `text` in the snapshot. Exactly one: use it.
-2. Several: pick the one whose neighbouring characters best match `context_before` / `context_after`. If still tied, take the first one not already claimed by another issue.
-3. None: try a case-insensitive and whitespace-normalised match. If that fails, drop the issue and count it in the status bar ("1 issue could not be placed").
+2. Several: prefer occurrences that do not start or end inside a word (so `go` does not match inside `good`), then the one whose neighbouring characters best match `context_before` / `context_after` (whitespace at the edge of the contexts is ignored). If still tied, take the first one not already claimed by another issue. Occurrences may overlap each other (`aa` occurs twice in `aaa`).
+3. None: try a case-insensitive match that ignores differences in whitespace (any run counts as one space) and treats typographic quotes (`‘ ’ “ ”`) and dashes (`– — −`) as the plain ones, since models often normalise them. If that fails, drop the issue and count it in the status bar ("1 issue could not be placed").
 4. Overlapping issues: keep the earlier one, drop the later one.
 
-Go strings are UTF-8 but Qt text positions are UTF-16 code units. The locator works on the Go string and converts byte offsets to UTF-16 offsets once, at the boundary to the UI. This conversion has its own tests with emoji and accented characters.
+Go strings are UTF-8 but Qt text positions are UTF-16 code units. The locator works on the Go string and converts byte offsets to UTF-16 offsets once, at the boundary to the UI, with `analysis.UTF16Map` (a runes above U+FFFF count as two units, an invalid byte as one). This conversion has its own tests with emoji and accented characters, and a fuzz test against `unicode/utf16`.
 
 ### 5.4 Explanation request
 
