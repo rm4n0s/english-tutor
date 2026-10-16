@@ -1,0 +1,32 @@
+{{define "toolbar"}}<header id="toolbar" class="toolbar">
+<div class="tb">
+  <label class="field">LLM
+    <select id="llm" data-on:change="@post('llm?id=' + el.value)"{{if not .LLMs}} disabled{{end}}>
+      {{range .LLMs}}<option value="{{.ID}}"{{if eq .ID $.LLMID}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+  </label>
+  {{if .Checking}}<button id="btn-check" type="button" class="primary" data-on:click="@post('cancel')" title="Cancel the running check (Ctrl+Enter)">Cancel</button>
+  {{else}}<button id="btn-check" type="button" class="primary" data-on:click="@post('check')"{{if not .CanCheck}} disabled{{end}} title="Find errors in the text (Ctrl+Enter)">Check</button>
+  {{end}}
+  <label class="field check"><input id="auto" type="checkbox"{{if .Auto}} checked{{end}} data-on:change="@post('auto?on=' + el.checked)"> Auto-check</label>
+  <span class="sep"></span>
+  <button type="button" data-on:click="@post('stats/open')">Statistics</button>
+  <button type="button" data-on:click="@post('prefs/open')">Preferences</button>
+  {{if .Remote}}<form method="post" action="/logout" class="inline"><button type="submit">Sign out</button></form>{{end}}
+</div>
+<div class="tb">
+  <button type="button" data-on:click="et.guard($_modified) &amp;&amp; @post('new')">New</button>
+  <button type="button" data-on:click="et.guard($_modified) &amp;&amp; et.pickFile()">Open</button>
+  <button id="btn-save" type="button" data-on:click="@post('save')" title="Download the text (Ctrl+S)">Save</button>
+  <button type="button" data-on:click="@post('saveas')">Save As</button>
+  <button type="button" data-on:click="@post('save-library')">Save to library</button>
+  <button type="button" data-on:click="@post('library/open')">Library</button>
+  <span class="docname" id="docname">{{.Name}}{{if .Modified}}*{{end}}</span>
+</div>
+<div class="tb legend" role="group" aria-label="Legend">
+  <span>Legend:</span>
+  {{range .Legend}}<button type="button" class="leg cat-{{.ID}}{{if .On}} on{{end}}" aria-pressed="{{.On}}" data-cat="{{.ID}}" data-on:click="@post('legend?c=' + el.dataset.cat)" title="Click to hide or show the {{.Label}} underlines">{{.Sample}} {{.Label}}</button>
+  {{end}}
+</div>
+</header>{{end}}

@@ -1,0 +1,45 @@
+{{define "page"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}}</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/app.css">
+<script type="module" src="/static/datastar.js"></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body data-signals="{{.Signals}}" data-init="@get('events')" data-effect="et.apply($_title, $_fs)">
+<span hidden data-effect="et.goto($_goto)"></span>
+<noscript><p class="banner">English Tutor needs JavaScript in the browser.</p></noscript>
+{{.Regions.Toolbar}}
+{{.Regions.Banner}}
+<main class="main">
+  <section class="left">
+    <div class="editor">
+      {{.Regions.Under}}
+      <textarea id="text" data-bind:text spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Text to check"
+        placeholder="Write or paste your English text here..."
+        data-on:input__debounce.200ms="@post('text')"
+        data-on:click__debounce.80ms="@post('cursor?pos=' + el.selectionStart)"
+        data-on:keyup__debounce.120ms="et.isNav(evt) &amp;&amp; @post('cursor?pos=' + el.selectionStart)"></textarea>
+    </div>
+  </section>
+  <aside class="right">
+    {{.Regions.Issues}}
+    {{.Regions.Explain}}
+  </aside>
+</main>
+{{.Regions.Status}}
+{{.Regions.Modal}}
+<div id="download" hidden></div>
+<button id="btn-next" type="button" hidden data-on:click="@post('issue/step?dir=next&amp;pos=' + document.getElementById('text').selectionStart)"></button>
+<button id="btn-prev" type="button" hidden data-on:click="@post('issue/step?dir=prev&amp;pos=' + document.getElementById('text').selectionStart)"></button>
+<form id="openform" enctype="multipart/form-data" hidden>
+  <input id="openfile" type="file" name="file" accept=".txt,.md,.markdown,text/plain,text/markdown"
+    data-on:change="@post('open', {contentType: 'form'}); el.value = ''">
+</form>
+</body>
+</html>
+{{end}}

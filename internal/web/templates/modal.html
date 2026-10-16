@@ -1,0 +1,128 @@
+{{define "modal"}}<div id="modal" class="backdrop"{{if not .Open}} hidden{{end}}>{{if .Open}}<div class="dialog" role="dialog" aria-modal="true">
+{{if eq .Kind "prompt"}}{{template "prompt" .Prompt}}{{else if eq .Kind "library"}}{{template "library" .Library}}{{else if eq .Kind "prefs"}}{{template "prefs" .Prefs}}{{else if eq .Kind "stats"}}{{template "stats" .Stats}}{{end}}
+</div>{{end}}</div>{{end}}
+
+{{define "prompt"}}<h2>{{.Title}}</h2>
+<form class="form" data-on:submit="@post('modal/submit', {contentType: 'form'})">
+  <label>{{.Label}}<input id="prompt-value" name="value" value="{{.Value}}" autocomplete="off" data-autofocus></label>
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  <div class="buttons"><button type="submit" class="primary">{{.Button}}</button><button type="button" data-close data-on:click="@post('modal/close')">Cancel</button></div>
+</form>{{end}}
+
+{{define "library"}}<h2>Library</h2>
+{{if .Docs}}<ul class="items">
+{{range .Docs}}<li data-id="{{.ID}}" data-title="{{.Title}}"><span class="main">{{.Title}}</span><span class="when">{{.UpdatedAt.Local.Format "2006-01-02 15:04"}}</span>
+  <span class="btns">
+    <button type="button" data-on:click="et.guard($_modified) &amp;&amp; @post('library/load?id=' + el.closest('li').dataset.id)">Open</button>
+    <button type="button" data-on:click="@post('library/rename?id=' + el.closest('li').dataset.id)">Rename</button>
+    <button type="button" class="danger" data-on:click="et.confirmDelete(el) &amp;&amp; @post('library/delete?id=' + el.closest('li').dataset.id)">Delete</button>
+  </span></li>
+{{end}}</ul>{{else}}<p class="empty">The library is empty. Use "Save to library" to add the text.</p>{{end}}
+<div class="buttons"><button type="button" data-close data-on:click="@post('modal/close')">Close</button></div>{{end}}
+
+{{define "prefs"}}<h2>Preferences</h2>
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="{{not .IsGeneral}}" data-on:click="@post('prefs/tab?tab=llms')">LLMs</button>
+  <button type="button" role="tab" aria-selected="{{.IsGeneral}}" data-on:click="@post('prefs/tab?tab=general')">General</button>
+</div>
+{{if .Message}}<p class="error" role="alert">{{.Message}}</p>{{end}}
+{{if .IsGeneral}}
+<form class="form" data-on:change="@post('prefs/general', {contentType: 'form'})" data-on:submit="@post('prefs/general', {contentType: 'form'})">
+  <label class="check"><input type="checkbox" name="auto_check" value="1"{{if .General.AutoCheck}} checked{{end}}> Auto-check</label>
+  <label>Auto-check delay (seconds)<input type="number" name="delay_s" min="1" max="600" value="{{.General.DelayS}}"></label>
+  <label>Editor font size (points)<input type="number" name="font_size" min="6" max="48" value="{{.General.FontSize}}"></label>
+  <p class="note">Changes apply and are saved at once.</p>
+</form>
+{{else if .Form}}{{template "llmform" .Form}}
+{{else}}
+{{if .LLMs}}<ul class="items">
+{{range .LLMs}}<li data-id="{{.ID}}" data-title="{{.Name}}"><span class="main">{{.Name}}</span><span class="when">{{.Provider}} · {{.Model}}</span>
+  <span class="btns">
+    <button type="button" data-on:click="@post('prefs/llm/edit?id=' + el.closest('li').dataset.id)">Edit</button>
+    <button type="button" class="danger" data-on:click="et.confirmDelete(el) &amp;&amp; @post('prefs/llm/delete?id=' + el.closest('li').dataset.id)">Delete</button>
+  </span></li>
+{{end}}</ul>{{else}}<p class="empty">No LLM yet.</p>{{end}}
+<div class="buttons"><button type="button" class="primary" data-on:click="@post('prefs/llm/edit?id=0')">Add LLM...</button></div>
+{{end}}
+<div class="buttons"><button type="button" data-close data-on:click="@post('modal/close')">Close</button></div>{{end}}
+
+{{define "llmform"}}<h3>{{.Title}}</h3>
+<form class="form" data-on:submit="@post('prefs/llm/save', {contentType: 'form'})">
+  <label>Name<input name="name" value="{{.Name}}" placeholder="Shown in the selector, for example Claude Sonnet" autocomplete="off" data-autofocus></label>
+  <label>Provider
+    <select name="provider" data-on:change="@post('prefs/llm/form', {contentType: 'form'})">
+      {{range .Providers}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+  </label>
+  <p class="note">{{.ProviderTip}}</p>
+  {{if .Privacy}}<p class="note italic">{{.Privacy}}</p>{{end}}
+  <label>Model<input name="model" value="{{.Model}}" placeholder="for example llama3.1, gpt-4o or claude-sonnet-5-5" autocomplete="off"></label>
+  <label>Base URL<input name="base_url" value="{{.BaseURL}}" placeholder="{{.Placeholder}}" autocomplete="off" data-on:change="@post('prefs/llm/form', {contentType: 'form'})"></label>
+  <label>API key<input type="password" name="api_key" autocomplete="new-password"{{if .KeyDisabled}} disabled{{end}}{{if .HasKey}} placeholder="A key is stored. Leave empty to keep it."{{end}}></label>
+  {{if and .HasKey (not .KeyDisabled)}}<label class="check"><input type="checkbox" name="clear_key" value="1"{{if .ClearKey}} checked{{end}}> Remove the stored key</label>{{end}}
+  <p class="note">{{.APIKeyNote}}</p>
+  <label>Temperature<input type="number" name="temperature" min="0" max="2" step="0.05" value="{{.Temperature}}"></label>
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  <p id="llmtest" class="{{if .TestOK}}ok{{else}}error{{end}}" role="status">{{.TestText}}</p>
+  <div class="buttons">
+    <button type="button" data-on:click="@post('prefs/llm/test', {contentType: 'form'})">Test connection</button>
+    <span class="grow"></span>
+    <button type="submit" class="primary">Save</button>
+    <button type="button" data-on:click="@post('prefs/tab?tab=llms')">Cancel</button>
+  </div>
+</form>{{end}}
+
+{{define "stats"}}<h2>Statistics</h2>
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="{{.Mistakes}}" data-on:click="@post('stats/tab?tab=mistakes')">Mistakes</button>
+  <button type="button" role="tab" aria-selected="{{not .Mistakes}}" data-on:click="@post('stats/tab?tab=usage')">Token usage</button>
+</div>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .Mistakes}}
+<form class="filters" data-on:change="@post('stats/filter', {contentType: 'form'})" data-on:submit="@post('stats/filter', {contentType: 'form'})">
+  <label>Category <select name="category">{{range .Categories}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+  <label>Period <select name="period">{{range .Periods}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+</form>
+<p class="summary">{{.Summary}}</p>
+{{if .Table}}<div class="scroll"><table class="stats">
+  <thead><tr>{{range .Columns}}<th><button type="button" class="th" data-col="{{.Index}}" data-on:click="@post('stats/sort?col=' + el.dataset.col)">{{.Title}} {{.Arrow}}</button></th>{{end}}</tr></thead>
+  <tbody>{{range .Table}}<tr class="{{if .Selected}}selected{{end}}" tabindex="0" data-type="{{.Type}}" data-on:click="@post('stats/select?type=' + el.dataset.type)">{{range .Cells}}<td>{{.}}</td>{{end}}</tr>
+  {{end}}</tbody></table></div>
+{{else if .HasRows}}<p class="empty">No mistakes match this filter.</p>
+{{else}}<p class="empty">No mistakes recorded yet. Press Check to find some.</p>{{end}}
+{{if .Selected}}<h3>Your most recent examples</h3><ul class="examples">{{range .Examples}}<li>{{.}}</li>{{end}}</ul>{{end}}
+<div class="buttons"><button type="button" class="danger" data-on:click="confirm('Delete all recorded mistakes? This cannot be undone.') &amp;&amp; @post('stats/reset?which=mistakes')">Reset statistics</button></div>
+{{else}}
+{{if .Usage}}<div class="scroll"><table class="stats">
+  <thead><tr><th>LLM</th><th>All time</th><th>Last 30 days</th><th>Last 7 days</th></tr></thead>
+  <tbody>{{range .Usage}}<tr><td>{{.LLM}}</td><td>{{.AllTime}}</td><td>{{.Last30}}</td><td>{{.Last7}}</td></tr>
+  {{end}}</tbody></table></div>
+<p class="note">~ marks counts that include estimates.</p>
+{{else}}<p class="empty">No requests recorded yet.</p>{{end}}
+<div class="buttons"><button type="button" class="danger" data-on:click="confirm('Delete the recorded token usage? This cannot be undone.') &amp;&amp; @post('stats/reset?which=usage')">Reset token usage</button></div>
+{{end}}
+<div class="buttons"><button type="button" data-close data-on:click="@post('modal/close')">Close</button></div>{{end}}
+
+{{define "login"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Sign in</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login">
+<main>
+  <h1>English Tutor</h1>
+  <form method="post" action="/login" class="form">
+    <label>Password<input type="password" name="password" autofocus autocomplete="current-password"></label>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    <div class="buttons"><button type="submit" class="primary">Sign in</button></div>
+  </form>
+</main>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,27 @@
+{{define "banner"}}<div id="banner" class="banner" role="alert"{{if not .}} hidden{{end}}><span class="msg">{{.}}</span><button type="button" class="x" aria-label="Dismiss" title="Dismiss" data-on:click="@post('banner/dismiss')">×</button></div>{{end}}
+
+{{define "issues"}}<section id="issues" class="issues" aria-label="Issues">
+<h2>{{.Header}}</h2>
+{{if .Empty}}<p class="empty">{{.Empty}}</p>{{else}}
+<ul id="issue-list" class="list" role="listbox" data-on:keydown="et.listKey(evt)">
+{{range .Rows}}<li id="issue-{{.ID}}" role="option" tabindex="0" aria-selected="{{.Selected}}" class="irow{{if .Selected}} selected{{end}}" data-id="{{.ID}}" data-on:click="@post('issue/select?id=' + el.dataset.id)" data-on:dblclick="et.focusEditor()"><span class="mark cat-{{.Category}}">{{.Marker}}</span><span class="snip">{{.Snippet}}</span><span class="sub">{{.Label}}{{with .Badge}} <span class="badge">{{.}}</span>{{end}}</span></li>
+{{end}}</ul>
+{{end}}</section>{{end}}
+
+{{define "explain"}}<section id="explain" class="explain" aria-live="polite">
+{{if .Header}}<p class="eheader">{{.Header}}</p>{{end}}
+{{if or .Loading .CanCancel .RedoLabel .NotAnError}}<div class="ebar">
+  {{if .Loading}}<span class="spinner" role="status" aria-label="Working"></span>{{end}}
+  {{if .CanCancel}}<button type="button" data-on:click="@post('explain/cancel')">Cancel</button>{{end}}
+  {{if .RedoLabel}}<button type="button" data-on:click="@post('explain/regenerate')">{{.RedoLabel}}</button>{{end}}
+  {{if .NotAnError}}<button type="button" data-on:click="@post('issue/not-an-error')" title="Remove this underline and its count: the LLM was wrong">Not an error</button>{{end}}
+</div>{{end}}
+<div class="ebody">
+{{if .Hint}}{{if .NoLLM}}<p><strong>No LLM is configured yet.</strong></p><p>Open <button type="button" class="link" data-on:click="@post('prefs/open')">Preferences</button> and add one to start checking your text.</p>{{else}}<p class="hint">Select an error in the list or an underlined error in the text to learn more.</p>{{end}}
+{{else if .Failed}}<p class="error">{{.Plain}}</p>
+{{else}}{{.Body}}{{end}}
+</div></section>{{end}}
+
+{{define "status"}}<footer id="statusbar" class="status"><span class="state" role="status">{{.State}}</span><span class="words">{{.Words}}</span><span class="tokens">{{.Tokens}}</span></footer>{{end}}
+
+{{define "download"}}<div id="download" hidden data-href="{{.Href}}" data-name="{{.Name}}"></div>{{end}}
