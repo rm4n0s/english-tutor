@@ -451,3 +451,26 @@ func TestButtonShortcuts(t *testing.T) {
 		}
 	})
 }
+
+func TestWebServerButton(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		if w.WebButtonText() != "Start web server" {
+			t.Errorf("button = %q, want Start web server", w.WebButtonText())
+		}
+		w.WebButtonClick() // no handler: nothing happens
+		clicks := 0
+		w.SetHandlers(Handlers{WebToggle: func() { clicks++ }})
+		w.WebButtonClick()
+		if clicks != 1 {
+			t.Errorf("clicks = %d, want 1", clicks)
+		}
+		w.SetWebRunning(true, "http://localhost:3333/")
+		if w.WebButtonText() != "Stop web server" || !strings.Contains(w.webBtn.ToolTip(), "http://localhost:3333/") {
+			t.Errorf("running: %q / %q", w.WebButtonText(), w.webBtn.ToolTip())
+		}
+		w.SetWebRunning(false, "")
+		if w.WebButtonText() != "Start web server" {
+			t.Errorf("stopped: %q", w.WebButtonText())
+		}
+	})
+}

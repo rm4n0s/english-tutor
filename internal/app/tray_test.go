@@ -12,7 +12,7 @@ func withTray(h *harness) *int {
 	quits := new(int)
 	onUI(func() {
 		h.a.quit = func() { *quits++ }
-		h.a.tray = ui.NewTray(h.a.win.Present, h.a.Quit)
+		h.a.tray = ui.NewTray(ui.TrayActions{Open: h.a.win.Present, Quit: h.a.Quit})
 	})
 	return quits
 }

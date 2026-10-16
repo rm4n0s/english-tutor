@@ -65,10 +65,15 @@ func (p preferences) SetGeneral(ctx context.Context, g ui.General) error {
 // something, the main window is refreshed straight away.
 func (a *App) openPreferences() {
 	dlg := ui.NewPreferencesDialog(a.ctx, a.win.Widget(), preferences{store: a.store}, ui.PreferencesHooks{
-		Changed: a.applyPreferences,
-		Failed:  func(err error) { logging.LogError(a.log, "preferences", err) },
+		Changed:    a.applyPreferences,
+		Failed:     func(err error) { logging.LogError(a.log, "preferences", err) },
+		WebToggle:  a.toggleWeb,
+		WebState:   a.webState,
+		WebChanged: a.onWebSettingsChanged,
 	})
+	a.prefsDlg = dlg
 	dlg.Exec()
+	a.prefsDlg = nil
 	dlg.Dialog().Delete()
 }
 

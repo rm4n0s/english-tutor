@@ -27,6 +27,11 @@ type fakeBackend struct {
 	tested     []store.LLMConfig
 	generalSet []General
 
+	web          WebSettings
+	webPorts     []int
+	webPasswords []string
+	webErr       error
+
 	listErr, saveErr, deleteErr, generalErr error
 	testResult                              analysis.TestResult
 	testErr                                 error
@@ -34,7 +39,7 @@ type fakeBackend struct {
 }
 
 func newFakeBackend(cfgs ...store.LLMConfig) *fakeBackend {
-	b := &fakeBackend{general: General{AutoCheckDelayS: 3, FontSize: 13}, nextID: 100}
+	b := &fakeBackend{general: General{AutoCheckDelayS: 3, FontSize: 13}, web: WebSettings{Port: 3333}, nextID: 100}
 	b.configs = cfgs
 	return b
 }
@@ -106,6 +111,34 @@ func (b *fakeBackend) SetGeneral(_ context.Context, g General) error {
 	}
 	b.general = g
 	b.generalSet = append(b.generalSet, g)
+	return nil
+}
+
+func (b *fakeBackend) WebSettings(context.Context) (WebSettings, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.web, b.webErr
+}
+
+func (b *fakeBackend) SetWebPort(_ context.Context, port int) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.webErr != nil {
+		return b.webErr
+	}
+	b.web.Port = port
+	b.webPorts = append(b.webPorts, port)
+	return nil
+}
+
+func (b *fakeBackend) SetWebPassword(_ context.Context, password string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.webErr != nil {
+		return b.webErr
+	}
+	b.web.HasPassword = password != ""
+	b.webPasswords = append(b.webPasswords, password)
 	return nil
 }
 

@@ -58,7 +58,8 @@ func Run(args []string) int {
 	}
 	code := qt.QApplication_Exec()
 	cancel()
-	a.Wait() // a check or a save that was still running ends before the database closes
+	a.web.Stop() // the pages in browsers end before the database closes
+	a.Wait()     // a check or a save that was still running ends before the database closes
 	log.Info("english-tutor stopped", "code", code)
 	return code
 }

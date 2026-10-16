@@ -33,6 +33,11 @@ type PreferencesBackend interface {
 	TestLLM(ctx context.Context, cfg store.LLMConfig) (analysis.TestResult, error)
 	General(ctx context.Context) (General, error)
 	SetGeneral(ctx context.Context, g General) error
+	// WebSettings, SetWebPort and SetWebPassword are the Web server tab. The
+	// password is stored as a hash; an empty one removes it.
+	WebSettings(ctx context.Context) (WebSettings, error)
+	SetWebPort(ctx context.Context, port int) error
+	SetWebPassword(ctx context.Context, password string) error
 }
 
 // PreferencesHooks lets the application react to the dialog.
@@ -41,6 +46,13 @@ type PreferencesHooks struct {
 	Changed func()
 	// Failed is called with every error the dialog shows, so it can be logged.
 	Failed func(err error)
+	// WebToggle starts or stops the web server, and WebState says whether it
+	// runs and at which address (section 4.7).
+	WebToggle func()
+	WebState  func() (running bool, url string)
+	// WebChanged is called after the port or the password changed, so a server
+	// that runs can use the new settings.
+	WebChanged func()
 }
 
 const colorError = "#D55E00"
@@ -104,10 +116,15 @@ type PreferencesDialog struct {
 	fontSize  *qt.QSpinBox
 	loading   bool // true while the General widgets are filled from settings
 
+	web webTab
+
 	// confirm asks a yes/no question; execForm runs a form dialog. Tests
 	// replace them, because both would otherwise block in a modal loop.
 	confirm  func(text string) bool
 	execForm func(f *LLMForm)
+	// askPassword asks for a new password twice and reports false if the user
+	// cancelled.
+	askPassword func() (string, string, bool)
 }
 
 // NewPreferencesDialog builds the dialog and loads the LLM list and the
@@ -123,12 +140,14 @@ func NewPreferencesDialog(ctx context.Context, parent *qt.QWidget, backend Prefe
 		return qt.QMessageBox_Question2(d.dlg.QWidget, "Preferences", text, qt.QMessageBox__Yes, qt.QMessageBox__No) == int(qt.QMessageBox__Yes)
 	}
 	d.execForm = func(f *LLMForm) { f.dlg.Exec() }
+	d.askPassword = d.askPasswordTwice
 
 	layout := qt.NewQVBoxLayout2()
 	d.dlg.SetLayout(layout.QLayout)
 	tabs := qt.NewQTabWidget2()
 	tabs.AddTab(d.buildLLMsTab(), "LLMs")
 	tabs.AddTab(d.buildGeneralTab(), "General")
+	tabs.AddTab(d.buildWebTab(), "Web server")
 	layout.AddWidget(tabs.QWidget)
 
 	d.banner = qt.NewQLabel3("")
@@ -151,6 +170,7 @@ func NewPreferencesDialog(ctx context.Context, parent *qt.QWidget, backend Prefe
 	})
 	d.reload(0)
 	d.loadGeneral()
+	d.loadWeb()
 	return d
 }
 

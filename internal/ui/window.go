@@ -18,9 +18,11 @@ type LLMChoice struct {
 // Handlers are the actions the window reports. Every field is optional; the
 // window does nothing for a nil one. They are called on the UI thread.
 type Handlers struct {
-	Check, Cancel    func()
-	Statistics       func()
-	Preferences      func()
+	Check, Cancel func()
+	Statistics    func()
+	Preferences   func()
+	// WebToggle starts or stops the web server (section 4.7).
+	WebToggle        func()
 	New, Open        func()
 	Save, SaveAs     func()
 	SaveToLibrary    func()
@@ -95,6 +97,7 @@ type MainWindow struct {
 	autoCheck *qt.QCheckBox
 	statsBtn  *qt.QPushButton
 	prefsBtn  *qt.QPushButton
+	webBtn    *qt.QPushButton
 	fileBtns  []*qt.QPushButton
 
 	legend map[analysis.Category]*qt.QToolButton
@@ -169,6 +172,9 @@ func (w *MainWindow) buildToolbars() {
 	row1.AddWidget(w.statsBtn.QWidget)
 	w.prefsBtn = qt.NewQPushButton3("Preferences")
 	row1.AddWidget(w.prefsBtn.QWidget)
+	row1.AddSeparator()
+	w.webBtn = qt.NewQPushButton3(webStartText)
+	row1.AddWidget(w.webBtn.QWidget)
 
 	w.win.AddToolBarBreak()
 	row2 := w.win.AddToolBarWithTitle("Files")
@@ -291,6 +297,7 @@ func (w *MainWindow) connect() {
 	})
 	w.statsBtn.OnClicked(func() { call(w.handlers.Statistics) })
 	w.prefsBtn.OnClicked(func() { call(w.handlers.Preferences) })
+	w.webBtn.OnClicked(func() { call(w.handlers.WebToggle) })
 	for i, f := range []func() func(){
 		func() func() { return w.handlers.New },
 		func() func() { return w.handlers.Open },
@@ -364,6 +371,24 @@ func call(f func()) {
 func (w *MainWindow) isDark() bool {
 	return w.win.Palette().Window().Color().Lightness() < 128
 }
+
+// SetWebRunning shows whether the web server runs: the button offers the
+// opposite, and its tooltip gives the address of the page.
+func (w *MainWindow) SetWebRunning(running bool, url string) {
+	if running {
+		w.webBtn.SetText(webStopText)
+		w.webBtn.SetToolTip("The web server runs at " + url + " . Press to stop it.")
+		return
+	}
+	w.webBtn.SetText(webStartText)
+	w.webBtn.SetToolTip("Serve this window in a web browser, on this computer or, with a password, on others.")
+}
+
+// WebButtonText returns the text of the web server button.
+func (w *MainWindow) WebButtonText() string { return w.webBtn.Text() }
+
+// WebButtonClick presses the web server button.
+func (w *MainWindow) WebButtonClick() { w.webBtn.Click() }
 
 // PreferencesButtonClick presses the Preferences button, as the user would.
 // It exists for tests of the code that sets the handlers.

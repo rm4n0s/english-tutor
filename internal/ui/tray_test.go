@@ -11,18 +11,65 @@ import (
 func TestTrayMenu(t *testing.T) {
 	uitest.OnUI(func() {
 		var calls []string
-		tray := NewTray(func() { calls = append(calls, "open") }, func() { calls = append(calls, "quit") })
-		if got := tray.OpenAction().Text(); got != "Open" {
-			t.Errorf("first item = %q, want Open", got)
-		}
-		if got := tray.CloseAction().Text(); got != "Close" {
-			t.Errorf("second item = %q, want Close", got)
+		tray := NewTray(TrayActions{
+			Open:      func() { calls = append(calls, "open") },
+			Quit:      func() { calls = append(calls, "quit") },
+			ToggleWeb: func() { calls = append(calls, "web") },
+			OpenWeb:   func() { calls = append(calls, "page") },
+		})
+		for _, c := range []struct {
+			act  *qt.QAction
+			want string
+		}{
+			{tray.OpenAction(), "Open"}, {tray.WebAction(), "Start web server"},
+			{tray.OpenWebAction(), "Open web page"}, {tray.CloseAction(), "Close"},
+		} {
+			if got := c.act.Text(); got != c.want {
+				t.Errorf("item = %q, want %q", got, c.want)
+			}
 		}
 		tray.OpenAction().Trigger()
+		tray.WebAction().Trigger()
 		tray.CloseAction().Trigger()
-		if want := []string{"open", "quit"}; len(calls) != 2 || calls[0] != want[0] || calls[1] != want[1] {
+		if want := []string{"open", "web", "quit"}; len(calls) != 3 || calls[0] != want[0] || calls[1] != want[1] || calls[2] != want[2] {
 			t.Errorf("calls = %v, want %v", calls, want)
 		}
+	})
+}
+
+func TestTrayWebItemsFollowTheServer(t *testing.T) {
+	uitest.OnUI(func() {
+		var calls []string
+		tray := NewTray(TrayActions{OpenWeb: func() { calls = append(calls, "page") }})
+		if tray.OpenWebAction().IsEnabled() {
+			t.Error("the page cannot be opened while the server is stopped")
+		}
+		tray.SetWebRunning(true)
+		if got := tray.WebAction().Text(); got != "Stop web server" {
+			t.Errorf("item = %q, want Stop web server", got)
+		}
+		if !tray.OpenWebAction().IsEnabled() {
+			t.Error("the page can be opened while the server runs")
+		}
+		tray.OpenWebAction().Trigger()
+		if len(calls) != 1 {
+			t.Errorf("calls = %v", calls)
+		}
+		tray.SetWebRunning(false)
+		if got := tray.WebAction().Text(); got != "Start web server" || tray.OpenWebAction().IsEnabled() {
+			t.Errorf("after stopping: %q, open enabled %v", got, tray.OpenWebAction().IsEnabled())
+		}
+	})
+}
+
+func TestTrayMenuWithNoActionsDoesNothing(t *testing.T) {
+	uitest.OnUI(func() {
+		tray := NewTray(TrayActions{})
+		tray.OpenAction().Trigger()
+		tray.WebAction().Trigger()
+		tray.CloseAction().Trigger()
+		tray.activated(qt.QSystemTrayIcon__Trigger)
+		tray.Notify("English Tutor", "ok") // must not crash, whether or not the desktop shows it
 	})
 }
 
@@ -42,7 +89,7 @@ func TestTrayActivation(t *testing.T) {
 			uitest.OnUI(func() {
 				opened := 0
 				quit := 0
-				tray := NewTray(func() { opened++ }, func() { quit++ })
+				tray := NewTray(TrayActions{Open: func() { opened++ }, Quit: func() { quit++ }})
 				tray.activated(tt.reason)
 				if opened != tt.opens || quit != 0 {
 					t.Errorf("opened %d (want %d), quit %d (want 0)", opened, tt.opens, quit)

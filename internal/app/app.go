@@ -9,6 +9,7 @@ import (
 	"time"
 
 	qt "github.com/mappu/miqt/qt6"
+	"github.com/mappu/miqt/qt6/mainthread"
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
@@ -17,6 +18,7 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
 	"github.com/rm4n0s/english-tutor/internal/ui"
+	"github.com/rm4n0s/english-tutor/internal/web"
 )
 
 // App is the running application: the main window and what it needs. It must
@@ -36,6 +38,15 @@ type App struct {
 	explainer *analysis.Explainer
 	win       *ui.MainWindow
 	state     *issues.State
+
+	// web is the web server (section 4.7). It runs only while the user wants it
+	// to, and keeps no state of the window: every browser tab has its own.
+	web *web.Server
+	// prefsDlg is the open Preferences dialog, if any, so that it follows the
+	// web server when the tray starts or stops it.
+	prefsDlg *ui.PreferencesDialog
+	// openBrowser opens an address in the browser; tests replace it.
+	openBrowser func(url string)
 
 	// tray is the system tray icon, nil when the application has none. With a
 	// tray, closing the window only hides it; the tray's Close item quits.
@@ -104,7 +115,19 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		},
 		autoDelay: store.DefaultAutoCheckSec * time.Second,
 		quit:      qt.QCoreApplication_Quit,
+		openBrowser: func(url string) {
+			qt.QDesktopServices_OpenUrl(qt.NewQUrl3(url))
+		},
 	}
+	a.web = web.New(ctx, web.Deps{
+		Log:   log,
+		Store: st,
+		Stats: stats,
+		// Read when it is called, so that a test can replace a.newModel.
+		NewModel: func(cfg store.LLMConfig) (llms.Model, error) { return a.newModel(cfg) },
+		// The web page changed the LLM list or a setting: the window reloads them.
+		SettingsChanged: func() { mainthread.Start(a.applyPreferences) },
+	})
 	a.autoTimer = qt.NewQTimer()
 	a.autoTimer.SetSingleShot(true)
 	a.autoTimer.OnTimeout(a.onAutoCheckTimer)
@@ -127,6 +150,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		CanClose:         a.canClose,
 		ModifiedChanged:  func(bool) { a.updateTitle() },
 		Statistics:       a.openStatistics,
+		WebToggle:        a.toggleWeb,
 		LLMSelected:      a.onLLMSelected,
 		AutoCheckChanged: a.onAutoCheckChanged,
 		CategoryToggled:  a.state.SetCategoryVisible,
@@ -272,12 +296,13 @@ func (a *App) onClosed() {
 	a.saveWindowState()
 }
 
-// stopWork cancels what is running and stops the timers.
+// stopWork cancels what is running and stops the timers and the web server.
 func (a *App) stopWork() {
 	a.analyzer.Cancel()
 	a.explainer.Cancel()
 	a.autoTimer.Stop()
 	a.renderTimer.Stop()
+	a.web.Stop()
 }
 
 // EnableTray puts the application in the system tray, so that closing the window
@@ -287,7 +312,13 @@ func (a *App) EnableTray() bool {
 	if !ui.TrayAvailable() {
 		return false
 	}
-	a.tray = ui.NewTray(a.win.Present, a.Quit)
+	a.tray = ui.NewTray(ui.TrayActions{
+		Open:      a.win.Present,
+		Quit:      a.Quit,
+		ToggleWeb: a.toggleWeb,
+		OpenWeb:   a.openWebPage,
+	})
+	a.tray.SetWebRunning(a.web.Running())
 	a.tray.Show()
 	qt.QGuiApplication_SetQuitOnLastWindowClosed(false)
 	return true
