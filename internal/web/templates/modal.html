@@ -59,7 +59,10 @@
   {{if .Privacy}}<p class="note italic">{{.Privacy}}</p>{{end}}
   <label>Model<input name="model" value="{{.Model}}" placeholder="for example llama3.1, gpt-4o or claude-sonnet-5-5" autocomplete="off"></label>
   <label>Base URL<input name="base_url" value="{{.BaseURL}}" placeholder="{{.Placeholder}}" autocomplete="off" data-on:change="@post('prefs/llm/form', {contentType: 'form'})"></label>
-  <label>API key<input type="password" name="api_key" autocomplete="new-password"{{if .KeyDisabled}} disabled{{end}}{{if .HasKey}} placeholder="A key is stored. Leave empty to keep it."{{end}}></label>
+  <label>API key
+    <span class="keyrow"><input id="api-key" type="password" name="api_key" autocomplete="new-password"{{if .KeyDisabled}} disabled{{end}}{{if .HasKey}} placeholder="A key is stored. Leave empty to keep it."{{end}}>
+    <button type="button" aria-pressed="false" title="Show or hide what you typed" data-on:click="et.toggleKey(el)"{{if .KeyDisabled}} disabled{{end}}>Show</button></span>
+  </label>
   {{if and .HasKey (not .KeyDisabled)}}<label class="check"><input type="checkbox" name="clear_key" value="1"{{if .ClearKey}} checked{{end}}> Remove the stored key</label>{{end}}
   <p class="note">{{.APIKeyNote}}</p>
   <label>Temperature<input type="number" name="temperature" min="0" max="2" step="0.05" value="{{.Temperature}}"></label>

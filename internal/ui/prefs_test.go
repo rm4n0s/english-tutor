@@ -423,6 +423,32 @@ func TestApiKeyFieldIsMaskedAndExplained(t *testing.T) {
 	}
 }
 
+func TestShowAndHideTheApiKey(t *testing.T) {
+	cfg := ollamaCfg(1, "cloud")
+	cfg.Provider, cfg.APIKey = "anthropic", "sk-secret"
+	withPrefs(t, newFakeBackend(cfg), func(d *PreferencesDialog, _ *hookLog) {
+		d.execForm = func(f *LLMForm) {
+			if f.apiKey.EchoMode() != qt.QLineEdit__Password || f.showKey.Text() != "Show" || !f.showKey.IsEnabled() {
+				t.Error("the key starts masked, with a Show button")
+			}
+			f.showKey.Click()
+			if f.apiKey.EchoMode() != qt.QLineEdit__Normal || f.showKey.Text() != "Hide" || f.apiKey.Text() != "sk-secret" {
+				t.Errorf("after Show: echo %v, button %q, text %q", f.apiKey.EchoMode(), f.showKey.Text(), f.apiKey.Text())
+			}
+			f.showKey.Click()
+			if f.apiKey.EchoMode() != qt.QLineEdit__Password || f.showKey.Text() != "Show" {
+				t.Error("Hide masks the key again")
+			}
+			f.provider.SetCurrentText("ollama")
+			if f.showKey.IsEnabled() {
+				t.Error("Ollama has no key, so the button is disabled with the field")
+			}
+			f.dlg.Reject()
+		}
+		d.editBtn.Click()
+	})
+}
+
 func TestDeleteLLM(t *testing.T) {
 	b := newFakeBackend(ollamaCfg(1, "local"), ollamaCfg(2, "other"))
 	withPrefs(t, b, func(d *PreferencesDialog, h *hookLog) {

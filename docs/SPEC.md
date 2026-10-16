@@ -148,7 +148,7 @@ A list of all the errors found by the last check sits at the top of the right co
   | Provider | `ollama`, `openai-compatible`, `anthropic` |
   | Model | Free text, for example `llama3.1`, `gpt-4o`, `claude-sonnet-5-5` |
   | Base URL | Required for `ollama` (default `http://localhost:11434`) and `openai-compatible`; optional for `anthropic`. Must be an `http://` or `https://` address (langchaingo's Ollama client would otherwise exit the program on an unparsable URL) |
-  | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field |
+  | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field, with a Show / Hide button next to it (always masked when the form opens) |
   | Temperature | Optional, default 0.2 |
 
 - **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).

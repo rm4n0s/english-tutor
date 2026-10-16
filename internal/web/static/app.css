@@ -170,6 +170,8 @@ input[type="checkbox"] { padding: 0; }
 .form label.check { flex-direction: row; align-items: center; gap: 0.4rem; }
 .filters { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.5rem; }
 .filters label { flex-direction: row; align-items: center; gap: 0.4rem; }
+.keyrow { display: flex; gap: 0.4rem; }
+.keyrow input { flex: 1; min-width: 0; }
 .note { color: var(--muted); font-size: 0.85em; margin: 0; }
 .italic { font-style: italic; }
 .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.9rem; }

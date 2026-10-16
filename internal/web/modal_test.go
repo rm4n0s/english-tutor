@@ -37,6 +37,9 @@ func TestPreferencesListsLLMsWithoutTheirKeys(t *testing.T) {
 	if !strings.Contains(form, "Privacy: the text you write is sent to api.example.com") {
 		t.Errorf("the privacy note names the server: %q", form)
 	}
+	if !strings.Contains(form, `id="api-key" type="password"`) || !strings.Contains(form, `et.toggleKey(el)`) {
+		t.Error("the key field starts masked and has a Show button for what is typed")
+	}
 	if !strings.Contains(form, `name="clear_key"`) {
 		t.Error("a stored key can be removed")
 	}

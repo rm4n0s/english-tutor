@@ -22,6 +22,7 @@ type LLMForm struct {
 	onSave  func(*store.LLMConfig) error
 
 	name, model, baseURL, apiKey *qt.QLineEdit
+	showKey                      *qt.QPushButton
 	provider                     *qt.QComboBox
 	temperature                  *qt.QDoubleSpinBox
 	providerNote                 *qt.QLabel
@@ -82,7 +83,16 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 
 	f.apiKey = qt.NewQLineEdit2()
 	f.apiKey.SetEchoMode(qt.QLineEdit__Password)
-	form.AddRow3("API key", f.apiKey.QWidget)
+	f.showKey = qt.NewQPushButton3("Show")
+	f.showKey.SetCheckable(true)
+	f.showKey.SetToolTip("Show or hide the key while you check it")
+	keyRow := qt.NewQWidget2()
+	keyLayout := qt.NewQHBoxLayout2()
+	keyLayout.SetContentsMargins(0, 0, 0, 0)
+	keyRow.SetLayout(keyLayout.QLayout)
+	keyLayout.AddWidget2(f.apiKey.QWidget, 1)
+	keyLayout.AddWidget(f.showKey.QWidget)
+	form.AddRow3("API key", keyRow)
 	keyNote := qt.NewQLabel3(apiKeyNote)
 	keyNote.SetWordWrap(true)
 	form.AddRow3("", keyNote.QWidget)
@@ -116,6 +126,7 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 	f.fill(cfg)
 	f.provider.OnCurrentTextChanged(func(string) { f.providerChanged() })
 	f.baseURL.OnTextChanged(func(string) { f.updatePrivacyNote() })
+	f.showKey.OnToggled(f.keyVisible)
 	f.saveBtn.OnClicked(f.save)
 	f.testBtn.OnClicked(f.test)
 	cancel.OnClicked(f.dlg.Reject)
@@ -155,6 +166,7 @@ func (f *LLMForm) providerChanged() {
 	f.baseURL.SetPlaceholderText(placeholder)
 	f.providerNote.SetText(note)
 	f.apiKey.SetEnabled(p != string(llm.ProviderOllama))
+	f.showKey.SetEnabled(p != string(llm.ProviderOllama))
 	url := strings.TrimSpace(f.baseURL.Text())
 	switch {
 	case p == string(llm.ProviderOllama) && url == "":
@@ -165,6 +177,18 @@ func (f *LLMForm) providerChanged() {
 		f.baseURL.SetText("")
 	}
 	f.updatePrivacyNote()
+}
+
+// keyVisible shows the API key as text, or masks it again. The key is always
+// masked when the form opens.
+func (f *LLMForm) keyVisible(on bool) {
+	if on {
+		f.apiKey.SetEchoMode(qt.QLineEdit__Normal)
+		f.showKey.SetText("Hide")
+		return
+	}
+	f.apiKey.SetEchoMode(qt.QLineEdit__Password)
+	f.showKey.SetText("Show")
 }
 
 // updatePrivacyNote shows or hides the note about sending text to a server on

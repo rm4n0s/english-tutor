@@ -25,6 +25,16 @@
 
     pickFile: () => $('openfile').click(),
 
+    // Show or hide what was typed in the API key field. The key that is stored
+    // is never sent to the page, so there is only the new key to show.
+    toggleKey: (btn) => {
+      const input = $('api-key');
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-pressed', String(show));
+    },
+
     focusEditor: () => text().focus(),
 
     // The tab title and the editor's font size follow the server's signals.
