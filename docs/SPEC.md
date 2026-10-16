@@ -21,7 +21,7 @@ A desktop application for practising written English. The user writes a sentence
 - No offline/rule-based checker (LanguageTool etc.); every error comes from the LLM.
 - No languages other than English as the text being checked.
 - No accounts, sync or cloud storage.
-- No mobile or web version.
+- No mobile app and no hosted service. The browser version (section 4.7) shows the same window to the user's own browser, from the user's own computer.
 - No lessons, exercises or grades. Progress tracking is limited to the per-error-type counts in section 5.7.
 
 ## 3. Technology
@@ -34,6 +34,7 @@ A desktop application for practising written English. The user writes a sentence
 | ORM | `gorm.io/gorm` (all queries through its builder) |
 | Database | SQLite, through a gorm SQLite driver (see below) |
 | Errors | `github.com/rm4n0s/errors` |
+| Web server | standard library (`net/http`, `html/template`) and the Datastar client, a vendored JavaScript file (MIT) |
 
 Dependencies and constraints:
 - miqt needs cgo and a C++ toolchain with the Qt 6 development packages installed, so the build is not pure Go. Build instructions go in the README.
@@ -66,13 +67,13 @@ Dependencies and constraints:
 ```
 
 - The window is a `QMainWindow`. The editor and the right column sit in a horizontal `QSplitter`, with the editor on the left. The right column is a vertical `QSplitter` with the issues list (section 4.3) on top and the explanation panel (section 4.4) below. Both splitter positions are remembered.
-- **Toolbar, row 1:** LLM selector (`QComboBox`), Check button, Auto-check checkbox (optional, **off by default**; the Check button always works), Statistics button (section 4.6), Preferences button. While a check is running, the Check button turns into a **Cancel** button (section 5.1).
+- **Toolbar, row 1:** LLM selector (`QComboBox`), Check button, Auto-check checkbox (optional, **off by default**; the Check button always works), Statistics button (section 4.6), Preferences button, and the **Start web server** button, which becomes **Stop web server** while the server runs (section 4.7). While a check is running, the Check button turns into a **Cancel** button (section 5.1).
 - **Toolbar, row 2:** New, Open, Save, Save As, Save to library, and Library (section 7).
 - **Keyboard:** `Ctrl+Return` presses Check (or Cancel while a check runs), `Ctrl+N`, `Ctrl+O`, `Ctrl+S` and `Ctrl+Shift+S` press New, Open, Save and Save As, and `F7` / `Shift+F7` move between issues (section 4.2). The tooltips of the buttons name their shortcut.
 - The LLM selector lists the configured LLMs by name. The last selection is remembered. If the list is empty, the selector is disabled, Check is disabled, and the explanation panel shows a markdown message that links to Preferences.
 - The status bar shows the issue count, the check state (idle, checking, cancelled, failed), the word count, and the input / output tokens of the last request and of the session (section 5.8).
 
-- **System tray:** when the desktop has a system tray, the application lives in it. Closing the window (the X button) only hides it: the text, a running check and the auto-check timer are left as they are, and the window state is saved. The tray icon has a menu with **Open**, which shows the same window again (restoring it if minimised), and **Close**, which quits the application; clicking the icon also opens the window. Quitting asks about unsaved changes first (Save, Discard, Cancel), with the window brought to the front for the question; Cancel keeps the application running. If the desktop has no system tray, nothing is hidden: closing the window asks about unsaved changes and quits, as it would without this feature.
+- **System tray:** when the desktop has a system tray, the application lives in it. Closing the window (the X button) only hides it: the text, a running check and the auto-check timer are left as they are, and the window state is saved. The tray icon has a menu with **Open**, which shows the same window again (restoring it if minimised), **Start web server** (**Stop web server** while it runs), **Open web page** (enabled while it runs; section 4.7), and **Close**, which quits the application; clicking the icon also opens the window. Quitting asks about unsaved changes first (Save, Discard, Cancel), with the window brought to the front for the question; Cancel keeps the application running. If the desktop has no system tray, nothing is hidden: closing the window asks about unsaved changes and quits, as it would without this feature.
 
 ### 4.2 Text editor
 
@@ -153,6 +154,7 @@ A list of all the errors found by the last check sits at the top of the right co
 - **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).
 - The Add / Edit form is validated before it is saved (the messages come from `llm.ModelConfig.Validate`) and shows store errors such as a duplicate name without closing. Choosing `ollama` fills in `http://localhost:11434` if the Base URL is empty; switching away from `ollama` clears that default again, so an Anthropic or OpenAI-compatible configuration never inherits a localhost address. The API key field is disabled for `ollama`, and a key typed before switching to `ollama` is not stored.
 - **General tab:** auto-check on/off (default off), auto-check delay in seconds (default 3, used only when auto-check is on; the field is disabled while auto-check is off), editor font size. Changes apply and are saved at once; there is no OK button, only Close.
+- **Web server tab:** the state of the web server with a Start / Stop button, the port (default 3333) and the password (section 4.7). A new port or password is saved when the field is left and restarts a server that runs.
 - The Add / Edit form shows a privacy note, "the text you write is sent to <server> when you check it or ask for an explanation", unless the server is on this computer (the host is `localhost`, `127.x.x.x` or `::1`, or Ollama with its default address). For Anthropic with no base URL it names Anthropic's server.
 - Deleting the currently selected LLM selects another one (the first by name), or leaves the selector empty if none remain; the new choice is remembered.
 
@@ -175,6 +177,35 @@ A list of all the errors found by the last check sits at the top of the right co
 - A **Reset statistics** button deletes all recorded mistakes after a confirmation.
 - A second tab, **Token usage**, shows input and output tokens per LLM for all time, the last 30 days and the last 7 days (section 5.8), with its own Reset button.
 - Details: the dialog is modal and has two tabs, **Mistakes** and **Token usage**, and a Close button. The period selector hides the error types that have no mistake in that period and drives the summary line ("24 mistakes in all time. Most frequent: Article."); the columns always show all-time, 7-day and 30-day counts. Clicking a header sorts by it: a number or date column starts with the largest or newest first, a text column alphabetically, and a second click reverses; ties are ordered by the error type's label. The examples list shows the three most recent snippets of the selected row with their dates and is empty when no row is selected (also after a filter or sort change). Reset asks for confirmation, and after it the issues list badges and the panel header counts are cleared. The Token usage table has one row per LLM with "input in / output out" for all time, 30 days and 7 days, `~` marks counts that include estimates, and its own Reset button; resetting one tab leaves the other alone. The queries are small grouped counts and run on the UI thread when the dialog opens or after a reset. A failed query or reset shows its message in a banner at the bottom of the dialog and is logged.
+
+### 4.7 Web server
+
+The application can show its window in a web browser, with the same functions: the editor with the underlines, the issues list, the explanations, the library, the statistics and the preferences. The server is **off** until the user starts it, and is only started from the desktop application.
+
+**Start and stop.** The **Start web server** button of the window, the tray item of the same name and the button on the Web server tab of Preferences start it; the same controls stop it (their text follows the state, and the tray's **Open web page** item, enabled while the server runs, opens the page in the browser). Quitting the application stops it and ends the pages in the browsers; hiding the window to the tray does not. A server that cannot start, because the port is in use for example, shows the reason in the window's banner and next to the tray icon. The server is not started at launch: whoever starts the application decides each time.
+
+**Port.** 3333 by default, any port from 1 to 65535 on the Web server tab (`web_port`). Changing the port or the password restarts a server that runs.
+
+**Who may connect.** Both rules apply to every request:
+- *This computer* is served without a password. A request counts as coming from this computer when its source address is a loopback address *and* its `Host` header names `localhost`, `*.localhost`, `127.x.x.x` or `[::1]`. The second part keeps another website from reaching the server through the visitor's browser by pointing its own name at 127.0.0.1 (DNS rebinding).
+- *Other computers* are served only if a password is set (Web server tab, at least 8 characters, kept as a salted PBKDF2-SHA256 hash in `web_password`, never as text). Without one the server listens on the loopback addresses only, so other computers cannot even connect; with one it listens on every address, and a browser from another computer gets a sign-in page. A correct password gives a session cookie (`HttpOnly`, `SameSite=Strict`, a day without requests). Five wrong passwords from one address block that address for five minutes. The page is plain HTTP, so on a network that is not trusted the password can be read; the tab says so.
+- A request that changes something must come from the page itself: it carries Datastar's own header, its `Origin` is the server's own address and its `Sec-Fetch-Site` is not cross-site. Another website cannot make the browser do something to the server.
+- `X-Forwarded-For` and similar headers are not trusted. A reverse proxy on this computer makes every request look local, so one must not be put in front of a server without a password.
+- Every response has a strict `Content-Security-Policy` (own files only; `unsafe-eval` for Datastar's expressions; no inline script or style), `X-Frame-Options: DENY`, `nosniff` and `no-referrer`.
+
+**Log.** Every request is logged, allowed or not, with the method, the route, the source address, the status, the size, the time and the verdict (`access=allowed`, or `access=denied` with the reason, as a warning). Query strings, bodies, workspace addresses and passwords are never logged: they hold the user's text and the key to their page (section 8).
+
+**Pages.** The server keeps the state of every open browser tab, the way `App` keeps the state of the window: the text, the issues and the selection, the explanation, the source of the text (section 5.7), the token totals, the dialog that is open. A page is addressed as `/w/<id>/`, where the id cannot be guessed, and belongs to the browser that made it. Reloading the page, or opening it again later, finds the same state; the state is dropped after 12 hours without a browser, when the server stops or restarts, and at most 64 pages are kept. The page is built with [Datastar](https://data-star.dev): the server renders each part of it (toolbar, underline layer, issues, explanation, status bar, dialogs) as HTML and pushes only the parts that changed over one Server-Sent Events stream per tab; an action is a POST that carries the editor's text and gets `204`. A browser that connects again (a hidden tab that comes back) gets the whole page again, except the text of its own editor. A streaming explanation is sent about ten times a second (section 4.4).
+
+**Same as the window.** The check, auto-check, cancel, the underlines (colour and line style per category, drawn under a transparent editor, so the editor is a plain `<textarea>`), the shared selection, F7 / Shift+F7, `Ctrl+Enter`, `Ctrl+S`, hover tooltips, the legend toggles, the issues list, the explanation panel with its states and header counts, Not an error, Regenerate, the statistics and token usage, the library, the LLM list (with Test connection) and the general settings. Edits move or remove underlines the way section 5.5 says: the page sends the whole text, and the server finds the edit as the part between the common start and end of the old and new text. Mistakes are recorded under the text's own source and counted once, as in section 5.7, whichever of the window and the pages checked the text; the LLM list, the selected LLM and the general settings are the same ones the window uses, and a change made in a page reloads them in the window.
+
+**What differs, because a browser is not a desktop:**
+- *Open* is the browser's file chooser; the file is uploaded, read with the rules of section 7 (UTF-8, no NUL byte, at most 10 MB, the file's line ending remembered) and shown. A browser does not tell the server where a file lives, so an opened text starts a new `session:` source instead of a `file:` one.
+- *Save* and *Save As* download the text as a file; the browser decides where it goes. Save uses the name of the text (a text without one asks for it, proposing its first line, and `.txt` is added when the name has no extension); Save As asks every time. The file is sent once from an address only that page knows and is not kept.
+- Before New, Open and opening a library document, a text with unsaved changes asks `Discard them?` in the browser; there is no Save choice in that question.
+- Right-click menus are replaced by the buttons of the explanation panel, `Ctrl+N` and `Ctrl+O` are left to the browser.
+- API keys are never sent to the browser. The edit form of an LLM says that a key is stored and keeps it when the field is left empty; a box removes it. The port and the password are set only in the window.
+- The explanation is untrusted markdown (section 5.9). A small renderer in `internal/web` turns it into HTML: it escapes everything first, shows raw HTML and images as text, and makes a link only for `http` and `https` addresses with a host, opened in a new tab (`noopener`) after a confirmation that shows the whole address. It is fuzzed to write no tag but its own.
 
 ## 5. Error analysis
 
@@ -360,7 +391,7 @@ Tables (created by numbered migrations, `001_init` first):
 
 `error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`.
 
-Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`. `splitter_sizes` holds four numbers as JSON: the horizontal splitter (editor, right column) then the vertical one (issues list, explanation panel). `window_geometry` is Qt's `saveGeometry()` bytes, base64 encoded. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry.
+Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`, `web_port`, `web_password`. `splitter_sizes` holds four numbers as JSON: the horizontal splitter (editor, right column) then the vertical one (issues list, explanation panel). `window_geometry` is Qt's `saveGeometry()` bytes, base64 encoded. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry, `web_port` 3333, no `web_password`. `web_password` holds the hash made by `web.HashPassword` (`pbkdf2-sha256$<rounds>$<salt>$<hash>`), never the password.
 
 API keys are stored in plain text in the database file. The `0600` permissions are the only protection. The Preferences dialog states this next to the API key field. Keys are never written to logs, error metadata or error messages.
 
@@ -378,12 +409,13 @@ internal/store/           gorm models, numbered migrations, Store
 internal/llm/             Provider enum, ModelConfig -> langchaingo llms.Model factory, token usage extraction
 internal/analysis/        prompts, response parsing, issue locating, chunking, error type taxonomy
 internal/issues/          issue state: placed issues, shared selection, category visibility, edit rebasing (no Qt)
-internal/ui/              main window, editor, issues list, explanation panel, dialogs
+internal/ui/              main window, editor, issues list, explanation panel, dialogs, tray
+internal/web/             the web server: access rules, per-tab state, Datastar pages (no Qt)
 internal/app/             application service tying store, llm and analysis to the UI
 internal/uitest/          test harness that runs the Qt event loop for tests (QT_QPA_PLATFORM=offscreen)
 ```
 
-- `internal/analysis`, `internal/issues` and `internal/llm` do not import miqt, so they can be tested without a display.
+- `internal/analysis`, `internal/issues`, `internal/llm` and `internal/web` do not import miqt, so they can be tested without a display. (`internal/web` imports `internal/ui` for its formatting and statistics helpers, which are in files without Qt, but that links Qt.)
 - `internal/ui` keeps what can be tested without Qt (colours and underline styles, token and word formatting) in files that do not import miqt. `MainWindow` holds widgets and reports user actions through a `Handlers` struct; it has no application logic. `internal/app` sets the handlers and owns the persistence of window state and settings.
 - The UI depends on small interfaces (`Analyzer`, `Explainer`, `ConfigStore`, `DocumentStore`) implemented by `internal/app`, so UI code can be driven by fakes.
 
@@ -406,6 +438,10 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `StatsQueryFailed` | `store` | reading counts for the panel header or the Statistics dialog fails |
 | `StatsResetFailed` | `store` | Reset statistics or Not an error fails to delete |
 | `UsageSaveFailed` | `store` | saving a request's token usage fails (the check result is still shown) |
+| `WebPortInvalid` | `store` | the web server port is not a number from 1 to 65535 |
+| `WebPasswordInvalid` | `web` | the web server password has fewer than 8 characters or is too long |
+| `WebServerAlreadyRunning` | `web` | the web server is started while it runs |
+| `WebServerStartFailed` | `web` | the web server cannot listen on its port (in use, no permission) |
 | `LogFileOpenFailed` | `logging` | the log file cannot be opened (the app falls back to stderr) |
 | `LogRotateFailed` | `logging` | the log file cannot be rotated (the record is still written to the current file) |
 | `UnknownProvider` | `llm` | provider string is not supported |
@@ -441,6 +477,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 - **Token usage:** each provider's `GenerationInfo` shape is normalised correctly (using recorded sample responses); a missing usage gives an estimate with the flag set; session totals and the 7 / 30 day sums are right.
 - **Untrusted text:** a text containing the closing delimiter or "ignore previous instructions" still produces a prompt with a unique random delimiter and the same parsing path; links other than http/https are never opened.
 - **Logging:** the log file is created with `0600`, rotates at the size limit, and contains no API key or user text.
+- **Web server** (`internal/web`, with real listeners on free ports, requests handed in from chosen addresses, and a fake LLM): the access rules table (this computer, rebinding, other computers with and without a password, cross-site requests), sign-in with a wrong password, the lock after five, sessions and their expiry, the log of every request without text or addresses, one workspace per browser and no use of another's, the stream (first the whole page, then only what changed, again after a reconnect), the whole check, explanation, selection, library, files, preferences and statistics flows, API keys that never reach a page, Stop with a check running, and a fuzz test of the markdown renderer. The pages were also driven by hand in a real browser (Firefox): typing, Check, underlines under the text, the list, F7, dialogs, upload and download, light and dark, a narrow screen.
 - Every tag in section 10 has a test that asserts the route with `HasRoute`.
 - Definition of done per CLAUDE.md: `gofmt`, `go vet ./...`, `golangci-lint run`, `go test -race ./...`. Qt tests need Qt's offscreen platform plugin and are skipped, with a message, when it is missing.
 

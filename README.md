@@ -67,6 +67,18 @@ English Tutor stays in the system tray. Closing the window with the X button onl
 
 If your desktop has no system tray (some GNOME setups need an AppIndicator extension), the X button quits the application as usual.
 
+## Web server
+
+The same window can be used in a web browser. Start the server with the **Start web server** button of the window, or the same item of the tray menu (**Open web page** then opens it); the same controls stop it. It is off until you start it, and quitting the application stops it.
+
+- **Port:** 3333 by default. Change it on the **Web server** tab of Preferences.
+- **Who may connect:** this computer, at `http://localhost:3333/`, needs nothing. Other computers are refused unless you set a password on the same tab; then they get a sign-in page. Without a password the server only listens on the loopback addresses. The page is plain HTTP, so use a password only on a network you trust, and do not put a reverse proxy on this computer in front of a server without a password (every request would look local).
+- **Differences:** Open is the browser's file chooser and Save / Save As download the text; unsaved changes are asked about with the browser's own question; API keys are never sent to the browser; the port and the password can only be changed in the window.
+- **Several tabs** each have their own text and issues. The LLM list, the library and the statistics are shared with the window. A tab keeps its state when you reload it, for 12 hours without a browser, and until the server stops.
+- **Log:** every request is logged in `logs/english-tutor.log` (method, route, address, status, time, allowed or denied). Never the text, the query or the address of a page.
+
+The pages use [Datastar](https://data-star.dev) (v1.0.4, MIT licence), vendored in `internal/web/static/`, so they work without internet access.
+
 ## Your data and privacy
 
 Everything is kept in `~/.english-tutor/` (mode `0700`):
@@ -102,7 +114,8 @@ internal/store       gorm models, numbered migrations, statistics, usage
 internal/llm         langchaingo factory, token usage, fake model for tests
 internal/analysis    prompts, parsing, locating, chunking, analyzer, explainer
 internal/issues      issue state, selection, edit rebasing (no Qt)
-internal/ui          Qt windows and dialogs
+internal/ui          Qt windows and dialogs, tray
+internal/web         the web server: access rules, per-tab state, Datastar pages (no Qt)
 internal/app         wiring: checks, saving, preferences
 internal/uitest      Qt test harness
 internal/specs       keeps the spec's error table and the tests in step
@@ -128,6 +141,8 @@ The automated tests use fake LLMs and an offscreen display. Before a release, ru
 11. Save, Save As, Open, Save to library, the Library dialog (open, rename, delete), and closing with unsaved changes.
 12. Try a dark theme and a narrow window.
 13. Press the X button: the window goes and a tray icon stays. **Open** (or a click on the icon) brings the same text back. With unsaved changes, tray **Close** asks first and quits; without a tray, X quits.
+14. Press **Start web server** (or the tray item) and open the page in a browser: write, Check, click an underline and a row, press `F7`, open Preferences, Statistics and the Library, upload a file with Open and download with Save. Start a second tab: it has its own text. Press **Stop web server**: the pages stop answering.
+15. Occupy port 3333 with another program and press **Start web server**: a banner names the port. Set a password on the Web server tab and open the page from another computer: it asks for the password, and five wrong ones lock that computer out for a while.
 
 ## Known limits
 
