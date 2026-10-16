@@ -61,6 +61,12 @@ The first build compiles the Qt bindings and takes several minutes; later builds
 | `Ctrl+N`, `Ctrl+O` | New, Open |
 | `Ctrl+S`, `Ctrl+Shift+S` | Save, Save As |
 
+## System tray
+
+English Tutor stays in the system tray. Closing the window with the X button only hides it; your text and any running check are kept. Use the tray icon to come back: click it or choose **Open**. Choose **Close** in the tray menu to quit; if the text has unsaved changes you are asked to save, discard or cancel first.
+
+If your desktop has no system tray (some GNOME setups need an AppIndicator extension), the X button quits the application as usual.
+
 ## Your data and privacy
 
 Everything is kept in `~/.english-tutor/` (mode `0700`):
@@ -121,6 +127,7 @@ The automated tests use fake LLMs and an offscreen display. Before a release, ru
 10. Open **Statistics** after two manual checks of the same text: each mistake is counted once; sorting, filters, examples and the Token usage tab work; Reset asks first.
 11. Save, Save As, Open, Save to library, the Library dialog (open, rename, delete), and closing with unsaved changes.
 12. Try a dark theme and a narrow window.
+13. Press the X button: the window goes and a tray icon stays. **Open** (or a click on the icon) brings the same text back. With unsaved changes, tray **Close** asks first and quits; without a tray, X quits.
 
 ## Known limits
 

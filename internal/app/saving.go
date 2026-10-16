@@ -293,5 +293,7 @@ func (a *App) onDocumentDeleted(id uint) {
 	}
 }
 
-// canClose is asked when the user closes the window.
-func (a *App) canClose() bool { return a.confirmDiscard() }
+// canClose is asked when the user closes the window. With a tray icon the window
+// is only hidden, so nothing is lost and nothing is asked; the question comes
+// when the application quits (Quit).
+func (a *App) canClose() bool { return a.tray != nil || a.confirmDiscard() }

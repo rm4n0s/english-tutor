@@ -15,7 +15,8 @@ import (
 
 // Run starts the application and returns its exit code. It creates the Qt
 // application, prepares ~/.english-tutor, opens the log and the database, and
-// runs the event loop until the main window is closed.
+// runs the event loop. With a system tray, closing the window hides it and the
+// tray's Close item ends the application; without one, closing the window ends it.
 func Run(args []string) int {
 	qt.NewQApplication(args)
 	qt.QCoreApplication_SetApplicationName("English Tutor")
@@ -52,6 +53,9 @@ func Run(args []string) int {
 	log.Info("english-tutor starting", "data_dir", paths.DataDir)
 	a := New(ctx, log, st)
 	a.Show()
+	if !a.EnableTray() {
+		log.Info("no system tray available, closing the window quits the application")
+	}
 	code := qt.QApplication_Exec()
 	cancel()
 	a.Wait() // a check or a save that was still running ends before the database closes

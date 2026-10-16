@@ -57,7 +57,7 @@ type Handlers struct {
 	// it open (for the unsaved-changes prompt).
 	CanClose func() bool
 	// Closed is called once the window has been told to close, before it goes
-	// away, to save the window state.
+	// away (or, with a tray icon, is hidden), to save the window state.
 	Closed func()
 }
 
@@ -374,6 +374,20 @@ func (w *MainWindow) SetHandlers(h Handlers) { w.handlers = h }
 
 // Show shows the window.
 func (w *MainWindow) Show() { w.win.Show() }
+
+// Present brings the window to the front: it shows it if it is hidden, restores
+// it if it is minimised and asks the desktop to focus it.
+func (w *MainWindow) Present() {
+	if w.win.IsMinimized() {
+		w.win.SetWindowState(w.win.WindowState() &^ qt.WindowMinimized)
+	}
+	w.win.Show()
+	w.win.Raise()
+	w.win.ActivateWindow()
+}
+
+// Visible reports whether the window is shown.
+func (w *MainWindow) Visible() bool { return w.win.IsVisible() }
 
 // Close closes the window as if the user had closed it.
 func (w *MainWindow) Close() bool { return w.win.Close() }

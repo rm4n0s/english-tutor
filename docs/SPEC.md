@@ -72,6 +72,8 @@ Dependencies and constraints:
 - The LLM selector lists the configured LLMs by name. The last selection is remembered. If the list is empty, the selector is disabled, Check is disabled, and the explanation panel shows a markdown message that links to Preferences.
 - The status bar shows the issue count, the check state (idle, checking, cancelled, failed), the word count, and the input / output tokens of the last request and of the session (section 5.8).
 
+- **System tray:** when the desktop has a system tray, the application lives in it. Closing the window (the X button) only hides it: the text, a running check and the auto-check timer are left as they are, and the window state is saved. The tray icon has a menu with **Open**, which shows the same window again (restoring it if minimised), and **Close**, which quits the application; clicking the icon also opens the window. Quitting asks about unsaved changes first (Save, Discard, Cancel), with the window brought to the front for the question; Cancel keeps the application running. If the desktop has no system tray, nothing is hidden: closing the window asks about unsaved changes and quits, as it would without this feature.
+
 ### 4.2 Text editor
 
 - A `QPlainTextEdit` with a monospace-free, comfortable proportional font and word wrap.
@@ -317,8 +319,8 @@ The LLMs in this app have no tools: no file, network or code access. Text in an 
 ## 6. Concurrency
 
 - All Qt calls happen on the UI thread. Background work (LLM calls, database access) runs in goroutines and posts results back using miqt's main-thread dispatch helper.
-- Every goroutine that does I/O receives a `context.Context`. Closing the window cancels the root context and waits for goroutines to end.
-- The check and explanation requests have timeouts (default 60 s and 120 s). The check timeout applies to each chunk's request, not to the whole check. A timeout produces `LLMCallTimeout`, and any other failure `LLMCallFailed`; both show their message in the error banner. Cancelling (by the user, by a newer request or by closing the window) is detected first and is not an error. Token usage is recorded for every request that reports it, including requests of a check that later fails or is cancelled.
+- Every goroutine that does I/O receives a `context.Context`. Quitting the application (closing the window when there is no tray, or the tray's Close item) cancels the root context and waits for goroutines to end; hiding the window to the tray does not.
+- The check and explanation requests have timeouts (default 60 s and 120 s). The check timeout applies to each chunk's request, not to the whole check. A timeout produces `LLMCallTimeout`, and any other failure `LLMCallFailed`; both show their message in the error banner. Cancelling (by the user, by a newer request or by quitting the application) is detected first and is not an error. Token usage is recorded for every request that reports it, including requests of a check that later fails or is cancelled.
 
 ## 7. Saving text
 
@@ -329,7 +331,7 @@ Two independent mechanisms:
 - *Open* loads a `.txt` or `.md` file as UTF-8. Invalid UTF-8 is rejected with a message.
 - *Save* writes to the current path, or behaves like *Save As* if there is none.
 - *Save As* opens a file dialog (`.txt`, `.md`).
-- The window title shows the file name and a `*` for unsaved changes. Closing with unsaved changes asks to save, discard or cancel.
+- The window title shows the file name and a `*` for unsaved changes. Quitting with unsaved changes asks to save, discard or cancel (closing the window to the tray does not, section 4.1).
 
 **Library (SQLite)**
 - *Save to library* stores the current text as a document (title, content, timestamps). The title defaults to the first line, shortened to 60 characters, and can be edited.

@@ -37,6 +37,11 @@ type App struct {
 	win       *ui.MainWindow
 	state     *issues.State
 
+	// tray is the system tray icon, nil when the application has none. With a
+	// tray, closing the window only hides it; the tray's Close item quits.
+	tray *ui.Tray
+	quit func() // ends the event loop; tests replace it
+
 	// newModel builds the langchaingo model of a configured LLM. Tests replace
 	// it with a fake.
 	newModel func(cfg store.LLMConfig) (llms.Model, error)
@@ -98,6 +103,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 			return llm.New(cfg.ModelConfig())
 		},
 		autoDelay: store.DefaultAutoCheckSec * time.Second,
+		quit:      qt.QCoreApplication_Quit,
 	}
 	a.autoTimer = qt.NewQTimer()
 	a.autoTimer.SetSingleShot(true)
@@ -256,12 +262,53 @@ func (a *App) loadAutoCheck() {
 	a.setAutoCheck(on)
 }
 
+// onClosed runs when the window is closed. With a tray icon the window is only
+// hidden and the application, with any check that is running, goes on; without
+// one the application is about to end, so its work stops.
 func (a *App) onClosed() {
+	if a.tray == nil {
+		a.stopWork()
+	}
+	a.saveWindowState()
+}
+
+// stopWork cancels what is running and stops the timers.
+func (a *App) stopWork() {
 	a.analyzer.Cancel()
 	a.explainer.Cancel()
 	a.autoTimer.Stop()
 	a.renderTimer.Stop()
+}
+
+// EnableTray puts the application in the system tray, so that closing the window
+// hides it instead of quitting. It returns false, and changes nothing, when the
+// desktop has no system tray: the window then closes the application as before.
+func (a *App) EnableTray() bool {
+	if !ui.TrayAvailable() {
+		return false
+	}
+	a.tray = ui.NewTray(a.win.Present, a.Quit)
+	a.tray.Show()
+	qt.QGuiApplication_SetQuitOnLastWindowClosed(false)
+	return true
+}
+
+// Quit ends the application (the tray's Close item). Unsaved changes are asked
+// about first, with the window brought to the front so that the question is
+// seen; Cancel keeps the application running.
+func (a *App) Quit() {
+	if a.win.Modified() {
+		a.win.Present()
+	}
+	if !a.confirmDiscard() {
+		return
+	}
+	a.stopWork()
 	a.saveWindowState()
+	if a.tray != nil {
+		a.tray.Hide()
+	}
+	a.quit()
 }
 
 func (a *App) saveWindowState() {
