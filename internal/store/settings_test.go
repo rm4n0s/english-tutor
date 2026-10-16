@@ -113,3 +113,58 @@ func TestSettingQueryFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestWebSettings(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	if p, err := s.WebPort(ctx); err != nil || p != 3333 {
+		t.Errorf("WebPort() = %d, %v; want the default 3333", p, err)
+	}
+	if h, err := s.WebPasswordHash(ctx); err != nil || h != "" {
+		t.Errorf("WebPasswordHash() = %q, %v; want none", h, err)
+	}
+
+	if err := s.SetWebPort(ctx, 8080); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := s.WebPort(ctx); err != nil || p != 8080 {
+		t.Errorf("WebPort() = %d, %v; want 8080", p, err)
+	}
+	if err := s.SetWebPasswordHash(ctx, "hash"); err != nil {
+		t.Fatal(err)
+	}
+	if h, err := s.WebPasswordHash(ctx); err != nil || h != "hash" {
+		t.Errorf("WebPasswordHash() = %q, %v; want hash", h, err)
+	}
+	if err := s.SetWebPasswordHash(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	if h, err := s.WebPasswordHash(ctx); err != nil || h != "" {
+		t.Errorf("WebPasswordHash() = %q, %v; an empty hash removes the password", h, err)
+	}
+}
+
+func TestWebPortDamagedValueGivesTheDefault(t *testing.T) {
+	ctx := context.Background()
+	for _, bad := range []string{"abc", "0", "-5", "70000", ""} {
+		s := newTestStore(t)
+		if err := s.SetSetting(ctx, KeyWebPort, bad); err != nil {
+			t.Fatal(err)
+		}
+		if p, err := s.WebPort(ctx); err != nil || p != DefaultWebPort {
+			t.Errorf("WebPort() with %q = %d, %v; want the default", bad, p, err)
+		}
+	}
+}
+
+func TestSetWebPortInvalid(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	for _, port := range []int{0, -1, 65536, 100000} {
+		assertRoute(t, s.SetWebPort(ctx, port), "Store.SetWebPort->ValidateWebPort.WebPortInvalid")
+	}
+	if p, _ := s.WebPort(ctx); p != DefaultWebPort {
+		t.Errorf("a rejected port was stored: %d", p)
+	}
+}
