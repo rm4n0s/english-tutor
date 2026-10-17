@@ -23,6 +23,7 @@ func TestParseResponse(t *testing.T) {
 		{"plain fence", "```\n" + oneIssue + "\n```\n", []string{"He go"}, []string{"subject_verb_agreement"}, 0},
 		{"prose before and after", "Sure, here you go:\n" + oneIssue + "\nHope this helps!", []string{"He go"}, []string{"subject_verb_agreement"}, 0},
 		{"braces in the prose before", "Result {see below}: " + oneIssue, []string{"He go"}, []string{"subject_verb_agreement"}, 0},
+		{"thinking before the answer", "<think>Maybe {a}, {b}, {c}, {d}, {e}, {f}, {g}, {h}, {i}. Draft: " + `{"issues":[{"text":"draft","error_type":"article"}]}` + "</think>\n" + oneIssue, []string{"He go"}, []string{"subject_verb_agreement"}, 0},
 		{"leading byte order mark", "\xef\xbb\xbf" + oneIssue, []string{"He go"}, []string{"subject_verb_agreement"}, 0},
 		{"bare array", `[{"text":"a b","error_type":"article"}]`, []string{"a b"}, []string{"article"}, 0},
 		{"unknown fields are ignored", `{"issues":[{"text":"x","error_type":"article","severity":"high"}],"summary":"ok"}`, []string{"x"}, []string{"article"}, 0},

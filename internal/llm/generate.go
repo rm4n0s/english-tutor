@@ -23,6 +23,10 @@ type Request struct {
 type Response struct {
 	Text  string
 	Usage Usage
+	// StopReason is why the model stopped, as the provider reports it (for
+	// example "stop", "length" or "max_tokens"). It is empty when the provider
+	// does not say.
+	StopReason string
 }
 
 // Generate sends req to model and returns the reply with its token usage.
@@ -58,5 +62,5 @@ func Generate(ctx context.Context, model llms.Model, req Request) (Response, err
 	if !ok {
 		usage = EstimateUsage(req.System+req.Prompt, choice.Content)
 	}
-	return Response{Text: strings.TrimSpace(choice.Content), Usage: usage}, nil
+	return Response{Text: strings.TrimSpace(choice.Content), Usage: usage, StopReason: choice.StopReason}, nil
 }

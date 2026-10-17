@@ -86,6 +86,9 @@ func ParseResponse(reply string) (Parsed, error) {
 	return out, nil
 }
 
+// thinkEnd closes the thinking block some reasoning models put before the answer.
+const thinkEnd = "</think>"
+
 // maxStarts bounds how many '{' positions decodeIssues tries, so a long reply
 // full of braces cannot make parsing quadratic.
 const maxStarts = 8
@@ -96,6 +99,11 @@ const maxStarts = 8
 // because an array nested in some other object is not an issue list.
 func decodeIssues(reply string) ([]rawIssue, bool) {
 	s := strings.TrimPrefix(reply, "\xef\xbb\xbf")
+	// A reasoning model may put its thinking in the answer. Only what follows
+	// it is the answer; the thinking can mention braces and draft other JSON.
+	if i := strings.LastIndex(s, thinkEnd); i >= 0 {
+		s = s[i+len(thinkEnd):]
+	}
 	tried := 0
 	for start := 0; start < len(s) && tried < maxStarts; start++ {
 		if s[start] != '{' {

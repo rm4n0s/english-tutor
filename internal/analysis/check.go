@@ -3,6 +3,8 @@ package analysis
 import (
 	"context"
 
+	"github.com/rm4n0s/errors"
+
 	"github.com/rm4n0s/english-tutor/internal/llm"
 )
 
@@ -46,10 +48,33 @@ func CheckText(ctx context.Context, chat Chat, text string, temperature float64)
 			return res, nil
 		}
 		if attempt == 1 {
-			return res, perr
+			return res, describeInvalid(perr, resp)
 		}
 		res.Retried = true
 		prompt = prompt.WithRetryReminder()
 	}
 	return res, nil // unreachable: the loop returns on its last pass
+}
+
+// describeInvalid adds to an LLMResponseInvalid error what is known about why
+// the reply was unusable, without the reply itself. A reply that stopped
+// because the model ran out of output tokens gets a message that says what to
+// do about it.
+func describeInvalid(err error, resp llm.Response) error {
+	appErr, ok := errors.FromError(err)
+	if !ok {
+		return err
+	}
+	appErr = appErr.SetMetadata("stop_reason", resp.StopReason)
+	if isOutputLimit(resp.StopReason) {
+		appErr = appErr.SetMessage("The model's answer was cut off because it reached its output limit. " +
+			"Check a shorter text, or set more Parallel requests for this LLM so each part is shorter.")
+	}
+	return appErr
+}
+
+// isOutputLimit reports whether a stop reason means the output limit was hit:
+// "length" for OpenAI-compatible servers and "max_tokens" for Anthropic.
+func isOutputLimit(reason string) bool {
+	return reason == "length" || reason == "max_tokens"
 }

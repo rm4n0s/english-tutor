@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -253,4 +254,43 @@ func promptOf(msgs []llms.MessageContent) string {
 		}
 	}
 	return b.String()
+}
+
+func TestCheckInvalidReplyExplainsItself(t *testing.T) {
+	tests := []struct {
+		name       string
+		stopReason string
+		wantCut    bool
+	}{
+		{"stopped normally", "stop", false},
+		{"provider does not say", "", false},
+		{"output limit of OpenAI-compatible servers", "length", true},
+		{"output limit of Anthropic", "max_tokens", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A reply cut in the middle of the JSON.
+			fake := llmtest.New(llmtest.Reply{Text: `{"issues":[{"text":"He go","err`, StopReason: tt.stopReason})
+			_, err := NewAnalyzer(AnalyzerConfig{}).Check(context.Background(), modelOf(fake), "He go home.")
+			assertRoute(t, err, "CheckText->ParseResponse.LLMResponseInvalid")
+			appErr, _ := errors.FromError(err)
+			if got := appErr.Metadata["stop_reason"]; got != tt.stopReason {
+				t.Errorf("stop_reason = %v, want %q", got, tt.stopReason)
+			}
+			if cut := strings.Contains(appErr.Message, "cut off"); cut != tt.wantCut {
+				t.Errorf("message %q: says cut off = %v, want %v", appErr.Message, cut, tt.wantCut)
+			}
+			if strings.Contains(appErr.Message, "He go") || strings.Contains(strings.Join(metadataValues(appErr), " "), `"err`) {
+				t.Error("the reply must not appear in the message or the metadata")
+			}
+		})
+	}
+}
+
+func metadataValues(e *errors.Error) []string {
+	var out []string
+	for _, v := range e.Metadata {
+		out = append(out, fmt.Sprint(v))
+	}
+	return out
 }

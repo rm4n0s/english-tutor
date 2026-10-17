@@ -25,6 +25,8 @@ type Reply struct {
 	Delay time.Duration
 	// Info becomes the choice's GenerationInfo (token counts).
 	Info map[string]any
+	// StopReason becomes the choice's StopReason.
+	StopReason string
 }
 
 // Call records one call made to the fake.
@@ -123,6 +125,7 @@ func (f *Fake) GenerateContent(ctx context.Context, messages []llms.MessageConte
 	return &llms.ContentResponse{Choices: []*llms.ContentChoice{{
 		Content:        text,
 		GenerationInfo: reply.Info,
+		StopReason:     reply.StopReason,
 	}}}, nil
 }
 

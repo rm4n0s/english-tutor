@@ -19,6 +19,7 @@ func TestGenerate(t *testing.T) {
 		wantText   string
 		wantUsage  Usage
 		wantChunks []string
+		wantStop   string
 	}{
 		{
 			name:      "reported usage is used as it is",
@@ -26,6 +27,14 @@ func TestGenerate(t *testing.T) {
 			req:       Request{System: "sys", Prompt: "hi"},
 			wantText:  "hello",
 			wantUsage: Usage{InputTokens: 12, OutputTokens: 3},
+		},
+		{
+			name:      "stop reason is passed on",
+			reply:     llmtest.Reply{Text: "cut", StopReason: "length", Info: map[string]any{"PromptTokens": 1, "CompletionTokens": 1}},
+			req:       Request{Prompt: "hi"},
+			wantText:  "cut",
+			wantUsage: Usage{InputTokens: 1, OutputTokens: 1},
+			wantStop:  "length",
 		},
 		{
 			name:      "missing usage is estimated from text length",
@@ -55,6 +64,9 @@ func TestGenerate(t *testing.T) {
 			got, err := Generate(context.Background(), fake, tt.req)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if got.StopReason != tt.wantStop {
+				t.Errorf("StopReason = %q, want %q", got.StopReason, tt.wantStop)
 			}
 			if got.Text != tt.wantText || got.Usage != tt.wantUsage {
 				t.Errorf("Generate() = %+v, want text %q usage %+v", got, tt.wantText, tt.wantUsage)
