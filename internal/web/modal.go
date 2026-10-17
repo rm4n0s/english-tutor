@@ -250,7 +250,7 @@ func (w *workspace) editLLM(id uint) {
 	}
 	pv.Message = ""
 	if id == 0 {
-		pv.Edit = &llmForm{Provider: string(llm.ProviderOllama), BaseURL: defaultOllamaURL,
+		pv.Edit = &llmForm{Provider: string(llm.DefaultProvider),
 			Temperature: strconv.FormatFloat(store.DefaultTemperature, 'f', -1, 64)}
 	} else {
 		cfg, err := w.srv.deps.Store.GetLLMConfig(w.ctx(), id)

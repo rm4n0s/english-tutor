@@ -138,7 +138,7 @@ func (f *LLMForm) fill(cfg store.LLMConfig) {
 	f.name.SetText(cfg.Name)
 	provider := cfg.Provider
 	if provider == "" {
-		provider = string(llm.ProviderOllama)
+		provider = string(llm.DefaultProvider)
 	}
 	if i := indexOfProvider(provider); i >= 0 {
 		f.provider.SetCurrentIndex(i)

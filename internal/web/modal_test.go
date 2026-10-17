@@ -59,7 +59,7 @@ func TestAddEditAndDeleteAnLLM(t *testing.T) {
 
 	// Add. An invalid form stays open with the message.
 	b.post(id, "prefs/llm/edit?id=0", "")
-	s.waitRegion(t, "modal", "Add LLM", `value="http://localhost:11434"`)
+	s.waitRegion(t, "modal", "Add LLM", `<option value="openai-compatible" selected`)
 	b.postForm(id, "prefs/llm/save", formValues("cloud", "anthropic", "claude-sonnet-5-5", "", ""))
 	s.waitRegion(t, "modal", "API key is required for Anthropic.", "Add LLM")
 	b.postForm(id, "prefs/llm/save", formValues("cloud", "anthropic", "claude-sonnet-5-5", "", secretKey))
@@ -127,7 +127,11 @@ func TestProviderChangeAppliesDefaults(t *testing.T) {
 	s := b.stream(id)
 	b.post(id, "prefs/open", "")
 	b.post(id, "prefs/llm/edit?id=0", "")
-	s.waitRegion(t, "modal", "Add LLM", "The address of your Ollama server.")
+	s.waitRegion(t, "modal", "Add LLM", "The address of any OpenAI-compatible API")
+
+	// Choosing Ollama fills in its address.
+	b.postForm(id, "prefs/llm/form", formValues("x", "ollama", "m", "", ""))
+	s.waitRegion(t, "modal", "The address of your Ollama server.", `value="http://localhost:11434"`)
 
 	// Away from Ollama the default address is cleared; the key field opens up.
 	b.postForm(id, "prefs/llm/form", formValues("x", "anthropic", "m", "http://localhost:11434", ""))

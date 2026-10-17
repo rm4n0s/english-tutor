@@ -20,6 +20,10 @@ const (
 	ProviderAnthropic        Provider = "anthropic"
 )
 
+// DefaultProvider is the provider a new configuration starts with in the
+// Preferences forms.
+const DefaultProvider = ProviderOpenAICompatible
+
 // Providers lists every supported provider in the order shown to the user.
 func Providers() []Provider {
 	return []Provider{ProviderOllama, ProviderOpenAICompatible, ProviderAnthropic}

@@ -260,17 +260,22 @@ func TestAddLLM(t *testing.T) {
 	})
 }
 
-func TestAddFormStartsWithOllamaDefaults(t *testing.T) {
+func TestAddFormStartsWithOpenAICompatibleDefaults(t *testing.T) {
 	withPrefs(t, newFakeBackend(), func(d *PreferencesDialog, _ *hookLog) {
 		var seen store.LLMConfig
 		d.execForm = func(f *LLMForm) {
 			seen = f.Config()
-			if f.apiKey.IsEnabled() {
-				t.Error("the API key is not used by ollama")
+			if !f.apiKey.IsEnabled() {
+				t.Error("an OpenAI-compatible server may need an API key")
+			}
+			// Choosing ollama still fills in its address.
+			f.provider.SetCurrentIndex(indexOfProvider("ollama"))
+			if got := f.baseURL.Text(); got != "http://localhost:11434" {
+				t.Errorf("ollama address = %q", got)
 			}
 		}
 		d.addBtn.Click()
-		if seen.Provider != "ollama" || seen.BaseURL != "http://localhost:11434" || seen.Temperature != 0.2 {
+		if seen.Provider != "openai-compatible" || seen.BaseURL != "" || seen.Temperature != 0.2 {
 			t.Errorf("new form = %+v", seen)
 		}
 	})
@@ -365,6 +370,7 @@ func TestFormShowsBackendErrorsAndStaysOpen(t *testing.T) {
 	b.saveErr = errors.New("LLMConfigNameTaken", "An LLM with this name already exists.")
 	withPrefs(t, b, func(d *PreferencesDialog, h *hookLog) {
 		d.execForm = func(f *LLMForm) {
+			f.provider.SetCurrentIndex(indexOfProvider("ollama")) // fills in the address
 			f.name.SetText("dup")
 			f.model.SetText("m")
 			f.saveBtn.Click()
@@ -608,6 +614,7 @@ func TestFormTestConnection(t *testing.T) {
 		var f *LLMForm
 		d.execForm = func(form *LLMForm) {
 			f = form
+			form.provider.SetCurrentIndex(indexOfProvider("ollama"))
 			form.model.SetText("llama3.1")
 			form.testBtn.Click()
 			if form.testResult.Text() != "Testing..." {
@@ -667,6 +674,7 @@ func TestFormatTestResult(t *testing.T) {
 func TestFormShowsThePrivacyNoteForRemoteServers(t *testing.T) {
 	withPrefs(t, newFakeBackend(), func(d *PreferencesDialog, _ *hookLog) {
 		d.execForm = func(f *LLMForm) {
+			f.provider.SetCurrentIndex(indexOfProvider("ollama"))
 			if !f.privacyNote.IsHidden() {
 				t.Errorf("a local Ollama server needs no note, got %q", f.privacyNote.Text())
 			}
