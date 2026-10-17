@@ -730,6 +730,23 @@ func (w *MainWindow) TriggerEditorMenu(label string) bool {
 	return false
 }
 
+// ReplaceRange replaces the text between the UTF-16 positions start and end
+// with text, as one step of the undo history, and puts the cursor after it. It
+// reports the edit like typing: issues touched by it go.
+func (w *MainWindow) ReplaceRange(start, end int, text string) {
+	c := w.editor.TextCursor() // freed by miqt's finalizer
+	c.BeginEditBlock()
+	c.SetPosition(start)
+	c.SetPosition2(end, qt.QTextCursor__KeepAnchor)
+	c.InsertText(text)
+	c.EndEditBlock()
+	w.editor.SetTextCursor(c)
+	w.editor.EnsureCursorVisible()
+}
+
+// Undo undoes the last edit of the editor.
+func (w *MainWindow) Undo() { w.editor.Undo() }
+
 // FocusEditor gives the keyboard focus to the editor.
 func (w *MainWindow) FocusEditor() { w.editor.SetFocus() }
 

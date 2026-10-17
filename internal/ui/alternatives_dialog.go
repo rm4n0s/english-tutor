@@ -15,6 +15,10 @@ const maxShownSelection = 400
 type AlternativesHooks struct {
 	// Retry asks for the alternatives again, after a failure.
 	Retry func()
+	// Chosen is called with the text of the alternative the user double-clicked.
+	// The application puts it in the editor in place of the selection and closes
+	// the window, or calls SetNotice to say why it could not.
+	Chosen func(text string)
 	// Closed is called once, when the window is closed (by the user or by
 	// Close), so that a running request can be stopped.
 	Closed func()
@@ -36,6 +40,7 @@ type AlternativesDialog struct {
 	banner    *qt.QLabel
 
 	alternatives []string
+	failed       bool // the banner shows a failure, so Retry is offered
 	closed       bool
 
 	// copyText puts text on the clipboard; tests replace it.
@@ -89,7 +94,7 @@ func NewAlternativesDialog(parent *qt.QWidget, selected string, hooks Alternativ
 
 	row := qt.NewQHBoxLayout2()
 	d.copyBtn = qt.NewQPushButton3("Copy")
-	d.copyBtn.SetToolTip("Copy the selected alternative to the clipboard (or double-click it)")
+	d.copyBtn.SetToolTip("Copy the selected alternative to the clipboard. Double-click an alternative to use it in the text.")
 	d.retryBtn = qt.NewQPushButton3("Retry")
 	closeBtn := qt.NewQPushButton3("Close")
 	closeBtn.SetDefault(true)
@@ -102,7 +107,7 @@ func NewAlternativesDialog(parent *qt.QWidget, selected string, hooks Alternativ
 	d.copyBtn.OnClicked(d.copySelected)
 	d.retryBtn.OnClicked(func() { call(d.hooks.Retry) })
 	closeBtn.OnClicked(func() { d.dlg.Close() })
-	d.list.OnItemDoubleClicked(func(*qt.QListWidgetItem) { d.copySelected() })
+	d.list.OnItemDoubleClicked(func(item *qt.QListWidgetItem) { d.choose(d.list.Row(item)) })
 	d.list.OnCurrentRowChanged(func(int) { d.updateButtons() })
 	d.dlg.OnFinished(func(int) { d.onClosed() })
 
@@ -155,6 +160,7 @@ func (d *AlternativesDialog) onClosed() {
 
 // SetLoading shows that the alternatives are being fetched.
 func (d *AlternativesDialog) SetLoading() {
+	d.failed = false
 	d.status.SetText("Looking for alternatives...")
 	d.bar.Show()
 	d.banner.SetText("")
@@ -167,6 +173,7 @@ func (d *AlternativesDialog) SetLoading() {
 // SetAlternatives shows the alternatives, one per row, and selects the first.
 func (d *AlternativesDialog) SetAlternatives(alts []string) {
 	d.alternatives = append([]string(nil), alts...)
+	d.failed = false
 	d.bar.Hide()
 	d.banner.SetText("")
 	d.banner.Hide()
@@ -183,6 +190,7 @@ func (d *AlternativesDialog) SetAlternatives(alts []string) {
 
 // SetFailed shows why the alternatives could not be fetched; Retry asks again.
 func (d *AlternativesDialog) SetFailed(msg string) {
+	d.failed = true
 	d.alternatives = nil
 	d.list.Clear()
 	d.bar.Hide()
@@ -192,10 +200,17 @@ func (d *AlternativesDialog) SetFailed(msg string) {
 	d.updateButtons()
 }
 
+// SetNotice shows a message under the list without touching the list, for
+// something that went wrong with an alternative the user chose.
+func (d *AlternativesDialog) SetNotice(msg string) {
+	d.banner.SetText(msg)
+	d.banner.Show()
+}
+
 func (d *AlternativesDialog) updateButtons() {
 	d.copyBtn.SetEnabled(d.currentRow() >= 0)
 	// Retry is offered when there is something to retry: after a failure.
-	d.retryBtn.SetVisible(!d.banner.IsHidden())
+	d.retryBtn.SetVisible(d.failed)
 }
 
 func (d *AlternativesDialog) currentRow() int {
@@ -204,6 +219,13 @@ func (d *AlternativesDialog) currentRow() int {
 		return -1
 	}
 	return row
+}
+
+// choose reports a double click on row.
+func (d *AlternativesDialog) choose(row int) {
+	if row >= 0 && row < len(d.alternatives) && d.hooks.Chosen != nil {
+		d.hooks.Chosen(d.alternatives[row])
+	}
 }
 
 func (d *AlternativesDialog) copySelected() {
@@ -239,6 +261,13 @@ func (d *AlternativesDialog) RetryVisible() bool { return !d.retryBtn.IsHidden()
 
 // CopyEnabled reports whether the Copy button can be pressed.
 func (d *AlternativesDialog) CopyEnabled() bool { return d.copyBtn.IsEnabled() }
+
+// DoubleClickRow double-clicks row, as the user would.
+func (d *AlternativesDialog) DoubleClickRow(row int) {
+	if item := d.list.Item(row); item != nil {
+		d.list.ItemDoubleClicked(item)
+	}
+}
 
 // SelectRow makes row the current one.
 func (d *AlternativesDialog) SelectRow(row int) { d.list.SetCurrentRow(row) }

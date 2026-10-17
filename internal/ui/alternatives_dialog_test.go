@@ -10,7 +10,7 @@ import (
 
 type altEvents struct {
 	retries, closed int
-	copied          []string
+	copied, chosen  []string
 }
 
 func withAlternatives(t *testing.T, selected string, f func(d *AlternativesDialog, ev *altEvents)) {
@@ -19,6 +19,7 @@ func withAlternatives(t *testing.T, selected string, f func(d *AlternativesDialo
 		ev := &altEvents{}
 		d := NewAlternativesDialog(nil, selected, AlternativesHooks{
 			Retry:  func() { ev.retries++ },
+			Chosen: func(text string) { ev.chosen = append(ev.chosen, text) },
 			Closed: func() { ev.closed++ },
 		})
 		defer d.dlg.Delete()
@@ -82,10 +83,49 @@ func TestAlternativesDialogCopy(t *testing.T) {
 		d.SelectRow(1)
 		d.CopyClick()
 		d.SelectRow(2)
-		d.list.ItemDoubleClicked(d.list.Item(2))
+		d.CopyClick()
 		want := []string{"huge", "line one\nline two", "large"}
 		if !slices.Equal(ev.copied, want) {
 			t.Errorf("copied %q, want %q", ev.copied, want)
+		}
+		if len(ev.chosen) != 0 {
+			t.Errorf("Copy must not choose: %q", ev.chosen)
+		}
+	})
+}
+
+func TestAlternativesDialogDoubleClickChoosesTheRow(t *testing.T) {
+	withAlternatives(t, "big", func(d *AlternativesDialog, ev *altEvents) {
+		d.SetAlternatives([]string{"huge", "line one\nline two", "large"})
+		d.DoubleClickRow(1)
+		d.DoubleClickRow(2)
+		d.DoubleClickRow(7) // no such row
+		if want := []string{"line one\nline two", "large"}; !slices.Equal(ev.chosen, want) {
+			t.Errorf("chosen %q, want %q", ev.chosen, want)
+		}
+		if len(ev.copied) != 0 {
+			t.Errorf("a double click must not copy: %q", ev.copied)
+		}
+	})
+}
+
+func TestAlternativesDialogNoticeKeepsTheList(t *testing.T) {
+	withAlternatives(t, "big", func(d *AlternativesDialog, _ *altEvents) {
+		d.SetAlternatives([]string{"huge", "large"})
+		d.SetNotice("The text has changed")
+		if d.ErrorText() != "The text has changed" || len(d.Alternatives()) != 2 || !d.CopyEnabled() {
+			t.Errorf("error %q, rows %d, copy %v", d.ErrorText(), len(d.Alternatives()), d.CopyEnabled())
+		}
+		if d.RetryVisible() {
+			t.Error("a notice is not a failure: nothing to retry")
+		}
+		d.SelectRow(1)
+		if d.ErrorText() == "" {
+			t.Error("the notice should stay until the next request")
+		}
+		d.SetLoading()
+		if d.ErrorText() != "" {
+			t.Error("a new request clears the notice")
 		}
 	})
 }

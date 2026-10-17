@@ -284,3 +284,125 @@ func TestAskingWithTheWindowOpenAsksAgain(t *testing.T) {
 		}
 	})
 }
+
+func TestDoubleClickReplacesTheSelectionAndClosesTheWindow(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		start, end int // UTF-16 units
+		row        int
+		want       string
+	}{
+		{"a word", "He go home. She have a cat.", 3, 5, 1, "He goes home. She have a cat."},
+		{"a sentence", "He go home. She have a cat.", 12, 27, 0, "He go home. She has a cat."},
+		{"after an emoji", "😀😀 He go home.", 8, 10, 1, "😀😀 He goes home."},
+		{"a paragraph into two", "He go home.\n\nShe has a cat.", 0, 11, 2, "He goes home.\nHe is home.\n\nShe has a cat."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alts := map[string][]string{
+				"a word":               {"went", "goes"},
+				"a sentence":           {"She has a cat.", "She owns a cat."},
+				"after an emoji":       {"went", "goes"},
+				"a paragraph into two": {"x", "y", "He goes home.\nHe is home."},
+			}[tt.name]
+			h := newHarness(t, llmtest.New(altReply(alts...)))
+			h.setText(tt.text)
+			onUI(func() { h.a.win.SetModified(false) })
+			h.askAlternatives(tt.start, tt.end)
+			h.waitAlternatives()
+			var dlg *ui.AlternativesDialog
+			onUI(func() {
+				dlg = h.a.altDlg
+				dlg.DoubleClickRow(tt.row)
+				if got := h.a.win.Text(); got != tt.want {
+					t.Errorf("text = %q, want %q", got, tt.want)
+				}
+				if h.a.altDlg != nil || dlg.IsVisible() {
+					t.Error("the window should be closed")
+				}
+				if !h.a.win.Modified() {
+					t.Error("the text should be marked as changed")
+				}
+				if h.a.win.ErrorText() != "" {
+					t.Errorf("banner: %q", h.a.win.ErrorText())
+				}
+				h.a.win.Undo()
+				if got := h.a.win.Text(); got != tt.text {
+					t.Errorf("one undo should bring back %q, got %q", tt.text, got)
+				}
+			})
+		})
+	}
+}
+
+func TestReplacingDropsTheIssueUnderTheSelection(t *testing.T) {
+	fake := llmtest.New(twoIssues(), altReply("He goes"))
+	h := newHarness(t, fake)
+	h.setText(sample)
+	h.checkButton()
+	h.waitIdle()
+	if n := len(h.underlines()); n != 2 {
+		t.Fatalf("underlines = %d", n)
+	}
+	h.askAlternatives(0, 5) // "He go", the first issue
+	h.waitAlternatives()
+	onUI(func() { h.a.altDlg.DoubleClickRow(0) })
+	us := h.underlines()
+	if len(us) != 1 || us[0].Start != 14 || us[0].End != 22 {
+		t.Errorf("the replaced issue goes and the other one moves: %+v", us)
+	}
+}
+
+func TestDoubleClickAfterTheTextChangedReplacesNothing(t *testing.T) {
+	h := newHarness(t, llmtest.New(altReply("went", "goes")))
+	h.setText(sample)
+	h.askAlternatives(3, 5) // "go"
+	h.waitAlternatives()
+	onUI(func() {
+		h.a.win.InsertTextAt(0, "Well, ") // the user kept typing: "go" moved
+		before := h.a.win.Text()
+		h.a.altDlg.DoubleClickRow(0)
+		if h.a.win.Text() != before {
+			t.Errorf("text changed to %q", h.a.win.Text())
+		}
+		d := h.a.altDlg
+		if d == nil || !d.IsVisible() || !strings.Contains(d.ErrorText(), "text has changed") {
+			t.Fatal("the window should stay open and say why")
+		}
+		if len(d.Alternatives()) != 2 || !d.CopyEnabled() || d.RetryVisible() {
+			t.Error("the alternatives must stay available to copy")
+		}
+	})
+}
+
+func TestDoubleClickWhenTheSelectedWordsWereEditedInPlace(t *testing.T) {
+	h := newHarness(t, llmtest.New(altReply("went", "goes")))
+	h.setText(sample)
+	h.askAlternatives(3, 5)
+	h.waitAlternatives()
+	onUI(func() {
+		h.a.win.ReplaceRange(3, 5, "ran") // same place, other words
+		h.a.altDlg.DoubleClickRow(0)
+		if got := h.a.win.Text(); got != "He ran home. She have a cat." {
+			t.Errorf("text = %q", got)
+		}
+		if h.a.altDlg == nil {
+			t.Error("the window should stay open")
+		}
+	})
+}
+
+func TestDoubleClickWhenTheTextGotShorter(t *testing.T) {
+	h := newHarness(t, llmtest.New(altReply("went")))
+	h.setText(sample)
+	h.askAlternatives(12, 20)
+	h.waitAlternatives()
+	onUI(func() {
+		h.a.win.SetText("short")
+		h.a.altDlg.DoubleClickRow(0)
+		if h.a.win.Text() != "short" || h.a.altDlg == nil || h.a.altDlg.ErrorText() == "" {
+			t.Errorf("text %q, window open %v", h.a.win.Text(), h.a.altDlg != nil)
+		}
+	})
+}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -392,4 +393,48 @@ func TestEditorMenuIsTheCustomMenu(t *testing.T) {
 			t.Error("the editor must use the custom menu, or Alternative is never offered")
 		}
 	})
+}
+
+func TestReplaceRange(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		start, end int
+		with       string
+		want       string
+		cursor     int
+	}{
+		{"a word", "He go to school.", 3, 5, "goes", "He goes to school.", 7},
+		{"a sentence", "He go. I very like it.", 7, 22, "I like it a lot.", "He go. I like it a lot.", 23},
+		{"longer than it was", "a b c", 2, 3, "something much longer", "a something much longer c", 23},
+		{"after an emoji", "😀 He go home.", 6, 8, "went", "😀 He went home.", 10},
+		{"with a line break", "He go home.", 0, 11, "First.\nSecond.", "First.\nSecond.", 14},
+		{"everything", "abc", 0, 3, "x", "x", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWindow(t, func(w *MainWindow) {
+				w.LoadText(tt.text)
+				var edits []string
+				w.SetHandlers(Handlers{TextEdited: func(pos, removed, added int) { edits = append(edits, fmt.Sprint(pos, removed, added)) }})
+				w.ReplaceRange(tt.start, tt.end, tt.with)
+				if got := w.Text(); got != tt.want {
+					t.Errorf("text = %q, want %q", got, tt.want)
+				}
+				if got := w.CursorPosition(); got != tt.cursor {
+					t.Errorf("cursor = %d, want %d", got, tt.cursor)
+				}
+				if !w.Modified() {
+					t.Error("the text should be marked as changed")
+				}
+				if len(edits) == 0 {
+					t.Error("the replacement must be reported like typing, so issues are rebased")
+				}
+				w.Undo()
+				if got := w.Text(); got != tt.text {
+					t.Errorf("one undo should restore %q, got %q", tt.text, got)
+				}
+			})
+		})
+	}
 }

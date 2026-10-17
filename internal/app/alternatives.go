@@ -25,11 +25,29 @@ func (a *App) onAlternative(start, end int) {
 	var dlg *ui.AlternativesDialog
 	dlg = ui.NewAlternativesDialog(a.win.Widget(), selected, ui.AlternativesHooks{
 		Retry:  func() { a.requestAlternatives(dlg, req) },
+		Chosen: func(alt string) { a.useAlternative(dlg, start, end, selected, alt) },
 		Closed: func() { a.dropAlternatives(dlg) },
 	})
 	a.altDlg = dlg
 	dlg.Show()
 	a.requestAlternatives(dlg, req)
+}
+
+// useAlternative puts the alternative the user double-clicked in the editor in
+// place of the selection it was asked for, and closes the window. If the text
+// at that place is no longer the selection (the user went on typing), nothing is
+// changed and the window says so, because replacing other words would lose text.
+func (a *App) useAlternative(dlg *ui.AlternativesDialog, start, end int, selected, alt string) {
+	text := a.win.Text()
+	um := analysis.NewUTF16Map(text)
+	bs, be := um.ByteOffset(start), um.ByteOffset(end)
+	if um.Offset(be) != end || text[bs:be] != selected {
+		dlg.SetNotice("The text has changed since you selected it, so nothing was replaced. Copy the alternative and paste it instead.")
+		return
+	}
+	a.win.ReplaceRange(start, end, alt)
+	a.closeAlternatives()
+	a.win.FocusEditor()
 }
 
 // requestAlternatives runs the request in the background and shows its outcome
