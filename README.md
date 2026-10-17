@@ -43,6 +43,17 @@ go build -o english-tutor ./cmd/english-tutor
 
 The first build compiles the Qt bindings and takes several minutes; later builds are fast because Go caches the result.
 
+### Install with `go install`
+
+Without cloning the repository (the Qt 6 packages and the C++ toolchain above are needed all the same):
+
+```
+go install github.com/rm4n0s/english-tutor/cmd/english-tutor@latest
+english-tutor
+```
+
+The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. There are no tagged versions yet, so `@latest` is the newest commit of `main`; use `@main` to say so, or a commit hash to pin one. From a clone, `go install ./cmd/english-tutor` does the same. The first build takes several minutes, like `go build`.
+
 ## First steps
 
 1. Click **Preferences** and add an LLM on the LLMs tab:
