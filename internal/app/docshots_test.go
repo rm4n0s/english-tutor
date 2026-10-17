@@ -173,7 +173,7 @@ func TestDocScreenshots(t *testing.T) {
 	var form *ui.LLMForm
 	onUI(func() {
 		form = ui.NewLLMForm(h.a.ctx, h.a.win.Widget(), preferences{store: h.a.store}, store.LLMConfig{
-			Name: "Llama 3.1 (Ollama)", Provider: "ollama", Model: "llama3.1", BaseURL: "http://localhost:11434", Temperature: 0.2,
+			Name: "Llama 3.1 (Ollama)", Provider: "ollama", Model: "llama3.1", BaseURL: "http://localhost:11434", Temperature: 0.2, NoThinking: true,
 		}, func(*store.LLMConfig) error { return nil })
 		form.Dialog().Show()
 	})

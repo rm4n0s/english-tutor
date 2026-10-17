@@ -38,7 +38,7 @@ English Tutor does not contain an AI model: it uses one you choose. You need one
 
 - **Ollama**, a free program that runs models on your own computer. Your text never leaves your machine. Install it from [ollama.com](https://ollama.com) and run `ollama pull llama3.1` once.
 - **An OpenAI-compatible server**, which is what many services and local tools offer.
-- **Anthropic** (Claude), with an API key.
+- **Anthropic** (Claude), with an API key. A service that offers Claude through the Anthropic protocol (some gateways do) also works with this choice.
 
 Click **Preferences**. On the **LLMs** tab, click **Add...**.
 
@@ -53,14 +53,16 @@ Fill in the form:
 | Name | Any name you like. It appears in the LLM selector. |
 | Provider | `ollama`, `openai-compatible` or `anthropic`. |
 | Model | The model's name, for example `llama3.1`. |
-| Base URL | For Ollama: `http://localhost:11434` (the app fills it in). For an OpenAI-compatible server: its address, ending in `/v1`. Anthropic needs none. |
+| Base URL | For Ollama: `http://localhost:11434` (the app fills it in). For an OpenAI-compatible server: its address, ending in `/v1`. Anthropic needs none; for a gateway that speaks the Anthropic protocol, its address ending in `/v1`. |
 | API key | Needed for Anthropic and for most online services; not for Ollama. **Show** reveals what you typed. |
 | Temperature | How creative the model is. Leave `0.2`: for checking mistakes you want steady answers. |
-| Timeout | How long one request may take. Leave it empty for the default (15 minutes for a check). Slow models that think before they answer may need more. |
+| Timeout | How long one request may take, in seconds (10 to 3600). Leave it on **Default** (empty in the browser): 15 minutes for a check, 2 minutes for an explanation or alternatives. |
+| Parallel requests | How many parts of a long text are checked at the same time (1 to 16). `1` sends them one after another. With `4`, a long text is cut into about four parts that are checked together, which is much faster; but some providers refuse too many requests at once. |
 | No thinking | Ticked for a new LLM. Leave it ticked for models that think before they answer (many "flash", Qwen, GLM and DeepSeek models). They answer at once, which is much faster. If the server answers with an error about an unknown field, untick it. It does nothing for Anthropic. |
-| Parallel requests | How many parts of a long text are checked at the same time. `1` sends them one after another; a higher number is faster, but some providers refuse too many requests at once. |
 
 Press **Test connection**. A success message with the time the model took means you are ready; otherwise the message tells you what failed. Then press **Save** and **Close**.
+
+> **Which provider for which model?** Some services give each model its own protocol. For example, OpenCode serves DeepSeek and GLM through the OpenAI-compatible one and Claude through the Anthropic one, but Gemini and GPT models through protocols this app does not speak yet; asking for them gives "Model does not support this protocol". Free tiers of some services may only be used from their own tools and answer with an error (403) when called from here. Use a model of the protocol you chose, or one from a paid plan.
 
 > **Privacy:** when you check a text, ask for an explanation or ask for alternatives, the text is sent to the LLM you selected. With Ollama on your own computer it stays there. If the server is on the internet, the form tells you so. API keys are stored as plain text in `~/.english-tutor/`, protected only by file permissions.
 
@@ -70,7 +72,9 @@ Type or paste some English into the editor. A paragraph or two is a good size. T
 
 ![The editor with a text typed in](images/01-write.png)
 
-Press **Check** (or `Ctrl+Return`). While the LLM works, a grey layer with **Checking...** covers the editor and the text cannot be changed, so that the result matches what you wrote. You can press **Cancel** (the Check button changes into it) at any time. Long texts are sent in pieces, so they can take a little longer. After 10 seconds the layer says that you will be notified when the results are ready: you can switch to another application, and the app shows a desktop message ("Check finished" or "Check failed") when the check ends if you are not looking at its window.
+Press **Check** (or `Ctrl+Return`). While the LLM works, a grey layer with **Checking...** covers the editor and the text cannot be changed, so that the result matches what you wrote. You can press **Cancel** (the Check button changes into it) at any time. Long texts are sent in pieces, so they can take a little longer.
+
+Some models take a minute or more. After 10 seconds the layer adds the line **We will notify you when the results are ready.** You can then switch to another application, or hide the window in the tray. When the check ends, and you are not looking at the window, the app shows a desktop message next to the tray icon, "Check finished" with the number of issues or "Check failed" with the reason, and asks the desktop to flash the window. Click the message to bring the window back. Nothing is shown when you are already looking at the window, after Cancel, or for Auto-check. (Without a system tray only the flashing is done.)
 
 ## 3. Read the underlines
 
@@ -172,7 +176,8 @@ If you close the app or start a new text with unsaved changes, it asks whether t
 ## More things to know
 
 - **The system tray.** Closing the window with the X button only hides it, and a running check keeps going. Click the tray icon to bring it back; choose **Close** in the tray menu to quit.
-- **Use it in a web browser.** Press **Start web server**, then open `http://localhost:3333/`. You get the same editor, list and explanations in the browser, and several tabs each have their own text. Right-click menus (Check on a selection, Alternative) are not in the browser version. Other computers can connect only if you set a password in **Preferences**, on the **Web server** tab. Use that only on a network you trust.
+- **Use it in a web browser.** Press **Start web server**, then open `http://localhost:3333/`. You get the same editor, list and explanations in the browser, and several tabs each have their own text. Right-click menus (Check on a selection, Alternative) are not in the browser version, and it does not show the 10-second hint or the desktop message when a check ends. Other computers can connect only if you set a password in **Preferences**, on the **Web server** tab. Use that only on a network you trust.
+- **Make long checks faster.** In order of effect: tick **No thinking** for models that think before they answer; raise **Parallel requests** to 3 or 4; use a smaller model; check one sentence or paragraph instead of everything (step 6). If a check ends with "took longer than ...", raise the **Timeout** of that LLM.
 - **Keyboard shortcuts.** `Ctrl+Return` check or cancel; `F7` / `Shift+F7` next / previous mistake; `Ctrl+N`, `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S` for the file buttons.
 - **Where your data lives.** Everything is in `~/.english-tutor/`: a database with your LLMs, library, statistics and settings, and a log that never contains your text.
 
@@ -182,7 +187,10 @@ If you close the app or start a new text with unsaved changes, it asks whether t
 |---|---|
 | **Check** is greyed out, and the panel says no LLM is configured. | Add one in Preferences (step 1). |
 | A banner above the editor says the check failed. | Read the message. Open Preferences and press **Test connection** on that LLM: the server may be off (start Ollama), the address wrong, or the key invalid. The old underlines are kept. |
-| The check is very slow. | Large models on a small computer are slow. Try a smaller model, or check a selection instead of the whole text (step 6). |
+| The check is very slow. | See **Make long checks faster** above. Large models on a small computer are slow too. |
+| "The request ... took longer than ...". | The model did not answer within the **Timeout** of that LLM. Raise it in Preferences, tick **No thinking**, or raise **Parallel requests** so each request is shorter. |
+| "The model's answer was not in the expected format." | The model did not return the list of mistakes in the form the app needs. Press **Check** again. If the message says the answer was cut off, the text was too long for the model's output limit: check less text, or raise **Parallel requests** so each part is shorter. |
+| An error with a number such as 400 or 403 and a message from the service. | The service refused the request. The message says why: the wrong protocol for the model, a key without access, or a field it does not know. If it names an unknown field, untick **No thinking** for that LLM. |
 | Some mistakes are "could not be placed". | The LLM named words that are not in your text, so they cannot be underlined. Press **Check** again. |
 | The LLM says something is wrong that is right. | Select it and press **Not an error**. It also leaves your statistics. |
 | Nothing is underlined, but you know there are mistakes. | Some models are too small to find them. Try a larger model. |
