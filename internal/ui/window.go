@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -113,6 +114,9 @@ type MainWindow struct {
 	editor       *qt.QPlainTextEdit
 	busy         *qt.QWidget // covers the editor while a check runs
 	busyLabel    *qt.QLabel
+	busyHint     *qt.QLabel // "we will notify you", shown when a check takes long
+	hintTimer    *qt.QTimer
+	hintDelay    time.Duration
 	hSplit       *qt.QSplitter
 	vSplit       *qt.QSplitter
 	issuesHeader *qt.QLabel
@@ -291,6 +295,13 @@ func (w *MainWindow) buildCentral() {
 // busyText is the text of the cover while a check runs.
 const busyText = "Checking..."
 
+// A check that takes longer than busyHintDelay shows busyHintText under the
+// busy indicator, so the user knows they can do something else meanwhile.
+const (
+	busyHintDelay = 10 * time.Second
+	busyHintText  = "We will notify you when the results are ready."
+)
+
 // buildBusyCover builds the loading screen of the editor: a translucent layer
 // over its viewport with a label and a busy indicator. The viewport's layout
 // keeps the layer the size of the viewport.
@@ -317,7 +328,17 @@ func (w *MainWindow) buildBusyCover() {
 	bar.SetMaximumHeight(8)
 	bar.SetMaximumWidth(240)
 	coverLayout.AddWidget3(bar.QWidget, 0, qt.AlignHCenter)
+	w.busyHint = qt.NewQLabel3(busyHintText)
+	w.busyHint.SetAlignment(qt.AlignCenter)
+	w.busyHint.SetWordWrap(true)
+	w.busyHint.Hide()
+	coverLayout.AddWidget(w.busyHint.QWidget)
 	coverLayout.AddStretch()
+
+	w.hintDelay = busyHintDelay
+	w.hintTimer = qt.NewQTimer()
+	w.hintTimer.SetSingleShot(true)
+	w.hintTimer.OnTimeout(func() { w.busyHint.Show() })
 
 	layout.AddWidget(w.busy)
 	w.busy.Hide()
@@ -541,11 +562,22 @@ func (w *MainWindow) SetChecking(checking bool) {
 // progress is for the text as it is.
 func (w *MainWindow) SetEditorBusy(busy bool) {
 	w.editor.SetReadOnly(busy)
+	w.busyHint.Hide()
+	w.hintTimer.Stop()
 	if busy {
 		w.busy.Raise()
+		w.hintTimer.Start(int(w.hintDelay.Milliseconds()))
 	}
 	w.busy.SetVisible(busy)
 }
+
+// IsActive reports whether the window is the one the user is working in. It is
+// false when another application has the focus and when the window is hidden.
+func (w *MainWindow) IsActive() bool { return w.win.IsActiveWindow() }
+
+// Alert asks the desktop to draw attention to the window (a flashing taskbar
+// entry, for example) when the user is in another application.
+func (w *MainWindow) Alert() { qt.QApplication_Alert(w.win.QWidget) }
 
 // EditorBusy reports whether the loading screen is over the editor.
 func (w *MainWindow) EditorBusy() bool { return !w.busy.IsHidden() }

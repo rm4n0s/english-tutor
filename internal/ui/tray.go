@@ -57,6 +57,7 @@ func NewTray(a TrayActions) *Tray {
 	t.quitAct.OnTriggered(func() { call(a.Quit) })
 	t.icon.SetContextMenu(t.menu)
 	t.icon.OnActivated(t.activated)
+	t.icon.OnMessageClicked(func() { call(t.open) })
 	return t
 }
 

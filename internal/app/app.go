@@ -52,7 +52,11 @@ type App struct {
 	// tray is the system tray icon, nil when the application has none. With a
 	// tray, closing the window only hides it; the tray's Close item quits.
 	tray *ui.Tray
-	quit func() // ends the event loop; tests replace it
+	// notifier shows a desktop message and windowActive says whether the user is
+	// in the window. Tests replace them.
+	notifier     func(title, text string)
+	windowActive func() bool
+	quit         func() // ends the event loop; tests replace it
 
 	// newModel builds the langchaingo model of a configured LLM. Tests replace
 	// it with a fake.
@@ -135,6 +139,8 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		// The web page changed the LLM list or a setting: the window reloads them.
 		SettingsChanged: func() { mainthread.Start(a.applyPreferences) },
 	})
+	a.notifier = a.trayNotify
+	a.windowActive = a.win.IsActive
 	a.autoTimer = qt.NewQTimer()
 	a.autoTimer.SetSingleShot(true)
 	a.autoTimer.OnTimeout(a.onAutoCheckTimer)

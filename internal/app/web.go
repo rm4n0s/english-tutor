@@ -66,7 +66,10 @@ func (a *App) refreshWeb() {
 }
 
 // notify shows a message next to the tray icon, if the application has one.
-func (a *App) notify(title, text string) {
+func (a *App) notify(title, text string) { a.notifier(title, text) }
+
+// trayNotify is the notifier of the running application.
+func (a *App) trayNotify(title, text string) {
 	if a.tray != nil {
 		a.tray.Notify(title, text)
 	}

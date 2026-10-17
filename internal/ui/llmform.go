@@ -108,7 +108,7 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 	f.timeout.SetRange(0, store.MaxTimeoutSeconds)
 	f.timeout.SetSuffix(" s")
 	f.timeout.SetSpecialValueText("Default")
-	f.timeout.SetToolTip("How long one request may take before it is given up. Default: 300 s for a check, 120 s for an explanation or alternatives. Use a longer time for slow models.")
+	f.timeout.SetToolTip("How long one request may take before it is given up. Default: 15 minutes for a check, 120 s for an explanation or alternatives. Use a longer time for slow models.")
 	form.AddRow3("Timeout", f.timeout.QWidget)
 
 	f.parallel = qt.NewQSpinBox2()

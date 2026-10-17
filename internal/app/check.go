@@ -131,6 +131,7 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, scope *checkScope
 	case err != nil:
 		a.state.AbortCheck()
 		a.checkFailed(err)
+		a.notifyCheckEnd(manual, "Check failed", userMessage(err))
 		return
 	case res.Cancelled:
 		a.state.AbortCheck()
@@ -144,8 +145,23 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, scope *checkScope
 		if manual {
 			a.recordMistakes(llmName, text, res.Placed)
 		}
+		if !out.Discarded {
+			a.notifyCheckEnd(manual, "Check finished", a.statusText())
+		}
 	}
 	a.refreshStatus()
+}
+
+// notifyCheckEnd tells the user that a check they started has ended, when they
+// are not looking at the window: a message next to the tray icon and a request
+// to the desktop to draw attention to the window. An auto-check is silent, and
+// so is a check that ends while the user is in the window and sees it.
+func (a *App) notifyCheckEnd(manual bool, title, text string) {
+	if !manual || a.windowActive() {
+		return
+	}
+	a.notify(title, text)
+	a.win.Alert()
 }
 
 // storeResult gives the issues of a finished check to the issue state: all of them
@@ -228,8 +244,11 @@ func (a *App) addUsage(u llm.Usage) {
 	a.win.SetTokens(a.lastUsage, a.sessionUsage)
 }
 
-func (a *App) refreshStatus() {
-	a.win.SetStatus(ui.FormatStatus(a.status, a.state.Phase() == issues.Checked, len(a.state.Items()), a.unplaced))
+func (a *App) refreshStatus() { a.win.SetStatus(a.statusText()) }
+
+// statusText is the left part of the status bar.
+func (a *App) statusText() string {
+	return ui.FormatStatus(a.status, a.state.Phase() == issues.Checked, len(a.state.Items()), a.unplaced)
 }
 
 // onStateChange redraws what depends on the issue state.

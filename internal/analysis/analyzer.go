@@ -13,7 +13,7 @@ import (
 
 // Default request timeouts (section 6 of the spec).
 const (
-	DefaultCheckTimeout   = 300 * time.Second
+	DefaultCheckTimeout   = 15 * time.Minute
 	DefaultExplainTimeout = 120 * time.Second
 )
 

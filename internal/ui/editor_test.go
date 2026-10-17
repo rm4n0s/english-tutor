@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -591,4 +592,56 @@ func TestCopyAndPasteKeepTheParagraphs(t *testing.T) {
 			t.Errorf("pasted %q, want %q", got, text)
 		}
 	})
+}
+
+func TestBusyCoverHintAppearsWhenTheCheckTakesLong(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.Show()
+		if w.hintDelay != busyHintDelay || busyHintDelay != 10*time.Second {
+			t.Errorf("the hint waits %v, want 10 s", w.hintDelay)
+		}
+		w.hintDelay = 30 * time.Millisecond
+
+		w.SetEditorBusy(true)
+		if !w.busyHint.IsHidden() {
+			t.Error("the hint must not show at once")
+		}
+		if w.busyHint.Text() != "We will notify you when the results are ready." {
+			t.Errorf("hint = %q", w.busyHint.Text())
+		}
+		waitUntil(t, "the hint", func() bool { return !w.busyHint.IsHidden() })
+
+		// Ending the check removes the hint; the next one starts without it.
+		w.SetEditorBusy(false)
+		if !w.busyHint.IsHidden() {
+			t.Error("the hint must go with the cover")
+		}
+		w.SetEditorBusy(true)
+		if !w.busyHint.IsHidden() {
+			t.Error("a new check starts without the hint")
+		}
+
+		// A check that ends before the delay never shows it.
+		w.SetEditorBusy(false)
+		deadline := time.Now().Add(150 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			qt.QCoreApplication_ProcessEvents()
+		}
+		if !w.busyHint.IsHidden() {
+			t.Error("a stopped timer must not show the hint")
+		}
+	})
+}
+
+func waitUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		qt.QCoreApplication_ProcessEvents()
+		if cond() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
 }
