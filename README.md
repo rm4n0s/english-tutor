@@ -4,7 +4,7 @@ A desktop app for practising written English. You write a sentence or an essay i
 
 Written in Go with [miqt](https://github.com/mappu/miqt) (Qt 6 bindings) and [langchaingo](https://github.com/tmc/langchaingo). Works with Ollama, any OpenAI-compatible server, and Anthropic.
 
-The full design is in [docs/SPEC.md](docs/SPEC.md).
+**New here?** The [tutorial](docs/TUTORIAL.md) walks through the app with screenshots. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
 ## What it does
 
@@ -121,7 +121,7 @@ internal/web         the web server: access rules, per-tab state, Datastar pages
 internal/app         wiring: checks, saving, preferences
 internal/uitest      Qt test harness
 internal/specs       keeps the spec's error table and the tests in step
-docs/                SPEC.md, IMPLEMENTATION.md (plan), IMPLEMENTED.md (log)
+docs/                SPEC.md, TUTORIAL.md (with images/), IMPLEMENTATION.md (plan), IMPLEMENTED.md (log)
 ```
 
 Conventions: errors use `github.com/rm4n0s/errors` with a tag and a route test per failure (a test checks that every tag in the spec's error table has one), tests are table-driven, there is no global mutable state, `context.Context` comes first in anything that does I/O, and all SQL goes through gorm with numbered migrations.

@@ -216,6 +216,9 @@ func (f *LLMForm) Config() store.LLMConfig {
 	return cfg
 }
 
+// Dialog returns the form's dialog widget.
+func (f *LLMForm) Dialog() *qt.QDialog { return f.dlg }
+
 // Saved reports whether the form was saved.
 func (f *LLMForm) Saved() bool { return f.saved }
 

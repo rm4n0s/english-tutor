@@ -800,6 +800,22 @@ func (w *MainWindow) EditorMenuLabels() []string {
 	return out
 }
 
+// EditorMenuPicture draws the editor's right-click menu as it is now, with the
+// entry labelled highlight (if there is one) under the mouse, and saves it as a
+// PNG file. It is for the screenshots of the documentation.
+func (w *MainWindow) EditorMenuPicture(path, highlight string) bool {
+	menu := w.buildEditorMenu(qt.NewQPoint())
+	defer menu.Delete()
+	for _, a := range menu.Actions() {
+		if a.Text() == highlight {
+			menu.SetActiveAction(a)
+		}
+	}
+	size := menu.SizeHint()
+	menu.Resize(size.Width(), size.Height())
+	return menu.Grab().Save(path)
+}
+
 // TriggerEditorMenu triggers one entry of the editor's right-click menu by its
 // label, and reports whether the menu has it.
 func (w *MainWindow) TriggerEditorMenu(label string) bool {

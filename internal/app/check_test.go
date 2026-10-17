@@ -34,8 +34,14 @@ func onUI(f func()) { uitest.OnUI(f) }
 
 func newHarness(t *testing.T, fake *llmtest.Fake) *harness {
 	t.Helper()
+	return newHarnessLLM(t, fake, "local")
+}
+
+// newHarnessLLM is newHarness with a name for the one configured LLM.
+func newHarnessLLM(t *testing.T, fake *llmtest.Fake, llmName string) *harness {
+	t.Helper()
 	st := newStore(t)
-	h := &harness{t: t, st: st, logs: &syncBuffer{}, llm: addLLM(t, st, "local")}
+	h := &harness{t: t, st: st, logs: &syncBuffer{}, llm: addLLM(t, st, llmName)}
 	onUI(func() {
 		h.a = New(context.Background(), slog.New(slog.NewTextHandler(h.logs, nil)), st)
 		h.a.newModel = func(store.LLMConfig) (llms.Model, error) { return fake, nil }

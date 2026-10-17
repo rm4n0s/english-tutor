@@ -118,6 +118,10 @@ func (d *StatisticsDialog) Exec() { d.dlg.Exec() }
 // Dialog returns the dialog widget.
 func (d *StatisticsDialog) Dialog() *qt.QDialog { return d.dlg }
 
+// SelectRow selects a row of the mistakes table, as a click would, and shows
+// the examples of its error type.
+func (d *StatisticsDialog) SelectRow(row int) { d.table.SelectRow(row) }
+
 func (d *StatisticsDialog) buildMistakesTab() *qt.QWidget {
 	tab := qt.NewQWidget2()
 	layout := qt.NewQVBoxLayout2()
