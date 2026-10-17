@@ -47,6 +47,9 @@ type ModelConfig struct {
 	BaseURL     string
 	APIKey      string
 	Temperature float64
+	// NoThinking asks the model not to think before it answers. It does
+	// something only for the providers in SupportsNoThinking.
+	NoThinking bool
 }
 
 // Validate checks that the fields the provider needs are present. A missing

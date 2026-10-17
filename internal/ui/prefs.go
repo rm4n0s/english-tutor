@@ -202,7 +202,7 @@ func (d *PreferencesDialog) buildLLMsTab() *qt.QWidget {
 	d.testResult.SetWordWrap(true)
 	layout.AddWidget(d.testResult.QWidget)
 
-	d.addBtn.OnClicked(func() { d.editLLM(store.LLMConfig{Temperature: store.DefaultTemperature}) })
+	d.addBtn.OnClicked(func() { d.editLLM(store.LLMConfig{Temperature: store.DefaultTemperature, NoThinking: true}) })
 	d.editBtn.OnClicked(func() {
 		if cfg, ok := d.current(); ok {
 			d.editLLM(cfg)

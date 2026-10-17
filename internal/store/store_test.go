@@ -83,7 +83,7 @@ func TestMigrationsAreRecorded(t *testing.T) {
 	if err := s.db.Model(&appliedMigration{}).Order("id").Pluck("id", &ids).Error; err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings"}
+	want := []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings", "005_llm_no_thinking"}
 	if len(ids) != len(want) {
 		t.Fatalf("applied = %v, want %v", ids, want)
 	}
@@ -111,7 +111,7 @@ func TestRunMigrations(t *testing.T) {
 		{
 			name:      "applies each migration once",
 			list:      []migration{{id: "a", up: func(*gorm.DB) error { return nil }}},
-			wantApply: []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings", "a"},
+			wantApply: []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings", "005_llm_no_thinking", "a"},
 		},
 		{
 			name: "failing migration is rolled back and reported",
@@ -119,7 +119,7 @@ func TestRunMigrations(t *testing.T) {
 				{id: "bad", up: func(*gorm.DB) error { return failing }},
 			},
 			wantRoute: "runMigrations.MigrationFailed",
-			wantApply: []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings"},
+			wantApply: []string{"001_init", "002_error_events", "003_llm_usage", "004_llm_request_settings", "005_llm_no_thinking"},
 		},
 	}
 	for _, tt := range tests {

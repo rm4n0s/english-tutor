@@ -698,3 +698,41 @@ func TestFormShowsThePrivacyNoteForRemoteServers(t *testing.T) {
 		d.addBtn.Click()
 	})
 }
+
+func TestNoThinkingCheckBox(t *testing.T) {
+	b := newFakeBackend()
+	withPrefs(t, b, func(d *PreferencesDialog, _ *hookLog) {
+		d.execForm = func(f *LLMForm) {
+			if !f.noThinking.IsChecked() {
+				t.Error("a new LLM starts with No thinking ticked")
+			}
+			f.name.SetText("Qwen")
+			f.provider.SetCurrentIndex(indexOfProvider("openai-compatible"))
+			f.model.SetText("qwen3.8-flash")
+			f.baseURL.SetText("https://api.example.com/v1")
+			if !f.noThinking.IsEnabled() {
+				t.Error("an OpenAI-compatible server can be told not to think")
+			}
+			f.saveBtn.Click()
+		}
+		d.addBtn.Click()
+		if len(b.saved) != 1 || !b.saved[0].NoThinking {
+			t.Fatalf("saved = %+v, want NoThinking", b.saved)
+		}
+	})
+
+	// For Anthropic the option does nothing: it is disabled and never stored.
+	withPrefs(t, newFakeBackend(), func(d *PreferencesDialog, _ *hookLog) {
+		d.execForm = func(f *LLMForm) {
+			f.noThinking.SetChecked(true)
+			f.provider.SetCurrentIndex(indexOfProvider("anthropic"))
+			if f.noThinking.IsEnabled() {
+				t.Error("Anthropic models do not think unless asked")
+			}
+			if f.Config().NoThinking {
+				t.Error("a disabled No thinking must not be stored")
+			}
+		}
+		d.addBtn.Click()
+	})
+}

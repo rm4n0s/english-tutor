@@ -1,6 +1,8 @@
 package llm
 
 import (
+	"net/http"
+
 	"github.com/rm4n0s/errors"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/anthropic"
@@ -20,21 +22,29 @@ type builder func(cfg ModelConfig) (llms.Model, error)
 func defaultBuilders() map[Provider]builder {
 	return map[Provider]builder{
 		ProviderOllama: func(cfg ModelConfig) (llms.Model, error) {
-			return ollama.New(
+			opts := []ollama.Option{
 				ollama.WithModel(cfg.Model),
 				ollama.WithServerURL(cfg.BaseURL),
-			)
+			}
+			if c := noThinkingClientIf(cfg); c != nil {
+				opts = append(opts, ollama.WithHTTPClient(c))
+			}
+			return ollama.New(opts...)
 		},
 		ProviderOpenAICompatible: func(cfg ModelConfig) (llms.Model, error) {
 			key := cfg.APIKey
 			if key == "" {
 				key = noKey
 			}
-			return openai.New(
+			opts := []openai.Option{
 				openai.WithModel(cfg.Model),
 				openai.WithBaseURL(cfg.BaseURL),
 				openai.WithToken(key),
-			)
+			}
+			if c := noThinkingClientIf(cfg); c != nil {
+				opts = append(opts, openai.WithHTTPClient(c))
+			}
+			return openai.New(opts...)
 		},
 		ProviderAnthropic: func(cfg ModelConfig) (llms.Model, error) {
 			opts := []anthropic.Option{
@@ -77,4 +87,13 @@ func newWith(cfg ModelConfig, builders map[Provider]builder) (llms.Model, error)
 func clientCreateFailed(err error, cfg ModelConfig) error {
 	return errors.NewErr("LLMClientCreateFailed", err).
 		SetMetadata("provider", string(cfg.Provider), "model", cfg.Model)
+}
+
+// noThinkingClientIf returns the HTTP client for cfg when it asks for no
+// thinking, and nil when it does not or the provider has nothing to send.
+func noThinkingClientIf(cfg ModelConfig) *http.Client {
+	if !cfg.NoThinking {
+		return nil
+	}
+	return noThinkingClient(cfg.Provider)
 }

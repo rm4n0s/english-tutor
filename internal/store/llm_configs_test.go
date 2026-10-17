@@ -136,6 +136,7 @@ func TestLLMConfigCRUD(t *testing.T) {
 	got.Temperature = 0.7
 	got.TimeoutSeconds = 240
 	got.MaxParallel = 4
+	got.NoThinking = true
 	if err := s.UpdateLLMConfig(ctx, got); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestLLMConfigCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	if again.Name != "gamma" || again.Provider != string(llm.ProviderAnthropic) || again.APIKey != "sk-1" ||
-		again.BaseURL != "" || again.Temperature != 0.7 || again.TimeoutSeconds != 240 || again.MaxParallel != 4 {
+		again.BaseURL != "" || again.Temperature != 0.7 || again.TimeoutSeconds != 240 || again.MaxParallel != 4 || !again.NoThinking {
 		t.Errorf("after update = %+v", again)
 	}
 	if !again.CreatedAt.Equal(createdAt) {
@@ -283,7 +284,7 @@ func TestLLMRequestSettingsMigration(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list = %+v, err = %v", list, err)
 	}
-	if list[0].TimeoutSeconds != 0 || list[0].MaxParallel != 0 {
+	if list[0].TimeoutSeconds != 0 || list[0].MaxParallel != 0 || list[0].NoThinking {
 		t.Errorf("old row = %+v, want timeout 0 and parallel 0", list[0])
 	}
 }

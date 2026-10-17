@@ -338,6 +338,9 @@ type llmFormData struct {
 	KeyDisabled bool
 	Providers   []selectOption
 	APIKeyNote  string
+	// NoThinkingDisabled is true for a provider the No thinking option does nothing for.
+	NoThinkingNote     string
+	NoThinkingDisabled bool
 	// Limits of the Timeout and Parallel requests fields.
 	MinTimeout, MaxTimeout, MaxParallel int
 }
@@ -359,8 +362,9 @@ func providerHints(p string) (placeholder, note string) {
 func (w *workspace) prefsData(pv *prefsView) *prefsData {
 	d := &prefsData{prefsView: pv, IsGeneral: pv.Tab == "general"}
 	if f := pv.Edit; f != nil {
-		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote,
-			MinTimeout: store.MinTimeoutSeconds, MaxTimeout: store.MaxTimeoutSeconds, MaxParallel: store.MaxParallelLimit}
+		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote, NoThinkingNote: ui.NoThinkingNote,
+			NoThinkingDisabled: !llm.SupportsNoThinking(llm.Provider(f.Provider)),
+			MinTimeout:         store.MinTimeoutSeconds, MaxTimeout: store.MaxTimeoutSeconds, MaxParallel: store.MaxParallelLimit}
 		if f.ID == 0 {
 			fd.Title = "Add LLM"
 		}

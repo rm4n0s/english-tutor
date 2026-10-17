@@ -316,6 +316,9 @@ func TestLLMRequestSettingsForm(t *testing.T) {
 	if !strings.Contains(form, `name="max_parallel" min="1" max="16" step="1" value="1"`) {
 		t.Errorf("parallel requests start at 1: %q", form)
 	}
+	if !strings.Contains(form, `name="no_thinking" value="1" checked>`) {
+		t.Errorf("No thinking starts ticked: %q", form)
+	}
 
 	// Bad values stay in the form with a message and are not stored.
 	tests := []struct {
@@ -354,6 +357,26 @@ func TestLLMRequestSettingsForm(t *testing.T) {
 	}
 	b.post(id, "prefs/llm/edit?id="+uitoa(fast.ID), "")
 	s.waitRegion(t, "modal", "Edit LLM", `name="timeout" min="10" max="3600" step="1" value="240"`, `max="16" step="1" value="4"`)
+
+	// No thinking is stored, shown again, and dropped for a provider it does nothing for.
+	v.Set("no_thinking", "1")
+	b.postForm(id, "prefs/llm/save", v)
+	s.waitRegion(t, "modal", ">fast<")
+	if got, _ := e.st.GetLLMConfig(t.Context(), fast.ID); !got.NoThinking {
+		t.Errorf("No thinking was not stored: %+v", got)
+	}
+	b.post(id, "prefs/llm/edit?id="+uitoa(fast.ID), "")
+	s.waitRegion(t, "modal", "Edit LLM", `name="no_thinking" value="1" checked>`)
+	anthropic := formValues("fast", "anthropic", "claude-haiku-5-5", "", secretKey)
+	anthropic.Set("no_thinking", "1")
+	b.postForm(id, "prefs/llm/save", anthropic)
+	s.waitRegion(t, "modal", ">fast<")
+	if got, _ := e.st.GetLLMConfig(t.Context(), fast.ID); got.NoThinking {
+		t.Errorf("No thinking does nothing for Anthropic and must not be stored: %+v", got)
+	}
+	v.Del("no_thinking")
+	b.postForm(id, "prefs/llm/save", v)
+	s.waitRegion(t, "modal", ">fast<")
 
 	// An empty timeout goes back to the default.
 	v.Set("timeout", "")

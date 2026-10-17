@@ -33,6 +33,7 @@ func migrations() []migration {
 		{id: "002_error_events", up: migration002ErrorEvents},
 		{id: "003_llm_usage", up: migration003LLMUsage},
 		{id: "004_llm_request_settings", up: migration004LLMRequestSettings},
+		{id: "005_llm_no_thinking", up: migration005LLMNoThinking},
 	}
 }
 
@@ -161,4 +162,26 @@ func migration004LLMRequestSettings(tx *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// llmConfigV5 is llmConfigV4 with NoThinking, off for the LLMs saved before.
+type llmConfigV5 struct {
+	ID             uint   `gorm:"primaryKey"`
+	Name           string `gorm:"not null;uniqueIndex"`
+	Provider       string `gorm:"not null"`
+	Model          string `gorm:"not null"`
+	BaseURL        string
+	APIKey         string
+	Temperature    float64
+	TimeoutSeconds int  `gorm:"not null;default:0"`
+	MaxParallel    int  `gorm:"not null;default:0"`
+	NoThinking     bool `gorm:"not null;default:false"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (llmConfigV5) TableName() string { return "llm_configs" }
+
+func migration005LLMNoThinking(tx *gorm.DB) error {
+	return tx.Migrator().AddColumn(&llmConfigV5{}, "NoThinking")
 }

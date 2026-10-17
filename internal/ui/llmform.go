@@ -13,6 +13,11 @@ import (
 // apiKeyNote is shown next to the API key field (section 8 of the spec).
 const apiKeyNote = "The key is stored in plain text in ~/.english-tutor/english-tutor.db. Only the file permissions (0600) protect it."
 
+// NoThinkingNote explains the No thinking check box.
+const NoThinkingNote = "Ask the model to answer at once, without thinking first. This is much faster for models that think. " +
+	"It adds the fields that GLM, DeepSeek, Qwen and Ollama models use for it to each request. " +
+	"If the server refuses them, switch it off. Anthropic models do not think unless asked, so it does nothing there."
+
 // LLMForm is the dialog that adds or edits one LLM configuration (section 4.5).
 type LLMForm struct {
 	dlg     *qt.QDialog
@@ -26,6 +31,7 @@ type LLMForm struct {
 	provider                     *qt.QComboBox
 	temperature                  *qt.QDoubleSpinBox
 	timeout, parallel            *qt.QSpinBox
+	noThinking                   *qt.QCheckBox
 	providerNote                 *qt.QLabel
 	privacyNote                  *qt.QLabel
 	message                      *qt.QLabel
@@ -116,6 +122,10 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 	f.parallel.SetToolTip("How many parts of a long text are checked at the same time. 1 sends them one after another. A higher number is faster but may hit the rate limit of the provider.")
 	form.AddRow3("Parallel requests", f.parallel.QWidget)
 
+	f.noThinking = qt.NewQCheckBox3("No thinking")
+	f.noThinking.SetToolTip(NoThinkingNote)
+	form.AddRow3("", f.noThinking.QWidget)
+
 	f.message = qt.NewQLabel3("")
 	f.message.SetWordWrap(true)
 	f.message.SetStyleSheet("color: " + colorError + ";")
@@ -162,6 +172,7 @@ func (f *LLMForm) fill(cfg store.LLMConfig) {
 	f.temperature.SetValue(cfg.Temperature)
 	f.timeout.SetValue(cfg.TimeoutSeconds)
 	f.parallel.SetValue(max(cfg.MaxParallel, 1))
+	f.noThinking.SetChecked(cfg.NoThinking)
 	f.providerChanged()
 }
 
@@ -182,6 +193,7 @@ func (f *LLMForm) providerChanged() {
 	f.providerNote.SetText(note)
 	f.apiKey.SetEnabled(p != string(llm.ProviderOllama))
 	f.showKey.SetEnabled(p != string(llm.ProviderOllama))
+	f.noThinking.SetEnabled(llm.SupportsNoThinking(llm.Provider(p)))
 	url := strings.TrimSpace(f.baseURL.Text())
 	switch {
 	case p == string(llm.ProviderOllama) && url == "":
@@ -230,6 +242,7 @@ func (f *LLMForm) Config() store.LLMConfig {
 	cfg.Temperature = f.temperature.Value()
 	cfg.TimeoutSeconds = f.timeout.Value()
 	cfg.MaxParallel = f.parallel.Value()
+	cfg.NoThinking = f.noThinking.IsChecked() && llm.SupportsNoThinking(llm.Provider(cfg.Provider))
 	return cfg
 }
 

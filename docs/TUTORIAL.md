@@ -57,6 +57,7 @@ Fill in the form:
 | API key | Needed for Anthropic and for most online services; not for Ollama. **Show** reveals what you typed. |
 | Temperature | How creative the model is. Leave `0.2`: for checking mistakes you want steady answers. |
 | Timeout | How long one request may take. Leave it empty for the default (15 minutes for a check). Slow models that think before they answer may need more. |
+| No thinking | Ticked for a new LLM. Leave it ticked for models that think before they answer (many "flash", Qwen, GLM and DeepSeek models). They answer at once, which is much faster. If the server answers with an error about an unknown field, untick it. It does nothing for Anthropic. |
 | Parallel requests | How many parts of a long text are checked at the same time. `1` sends them one after another; a higher number is faster, but some providers refuse too many requests at once. |
 
 Press **Test connection**. A success message with the time the model took means you are ready; otherwise the message tells you what failed. Then press **Save** and **Close**.

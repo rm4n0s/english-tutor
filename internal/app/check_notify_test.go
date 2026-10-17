@@ -60,10 +60,13 @@ func TestCheckEndNotifiesWhenTheUserIsElsewhere(t *testing.T) {
 }
 
 func TestCancelledCheckDoesNotNotify(t *testing.T) {
-	h := newHarness(t, llmtest.New(llmtest.Reply{Text: issuesReply(nil), Delay: 5 * time.Second}))
+	fake := llmtest.New(llmtest.Reply{Text: issuesReply(nil), Delay: 5 * time.Second})
+	h := newHarness(t, fake)
 	got := h.notices(false)
 	h.setText(sample)
 	h.checkButton()
+	// Cancel only once the request is out; before that there is nothing to cancel.
+	h.waitFor("the request", func() bool { return len(fake.Calls()) > 0 })
 	onUI(func() { h.a.analyzer.Cancel() })
 	h.waitIdle()
 	if len(*got) != 0 {

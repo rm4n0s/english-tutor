@@ -258,7 +258,8 @@ func TestTheCoverGoesWhenACheckIsCancelledOrFails(t *testing.T) {
 			h.waitFor("the request", func() bool { return h.a.checking })
 			h.checkButton() // the Cancel button
 		}},
-		{"failed", llmtest.Reply{Err: io.ErrUnexpectedEOF}, func(*harness) {}},
+		// The failure comes after a delay, so that the test can see the cover before it goes.
+		{"failed", llmtest.Reply{Err: io.ErrUnexpectedEOF, Delay: 100 * time.Millisecond}, func(*harness) {}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

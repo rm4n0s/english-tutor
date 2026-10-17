@@ -171,6 +171,7 @@ type llmForm struct {
 	Temperature string
 	Timeout     string // seconds; empty is the default
 	Parallel    string
+	NoThinking  bool
 	Error       string
 	TestText    string
 	TestOK      bool
@@ -211,6 +212,7 @@ func (f *llmForm) config(stored *store.LLMConfig) (store.LLMConfig, error) {
 		}
 		cfg.TimeoutSeconds = n
 	}
+	cfg.NoThinking = f.NoThinking && llm.SupportsNoThinking(llm.Provider(f.Provider))
 	if s := strings.TrimSpace(f.Parallel); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil {
@@ -267,7 +269,7 @@ func (w *workspace) editLLM(id uint) {
 	pv.Message = ""
 	if id == 0 {
 		pv.Edit = &llmForm{Provider: string(llm.DefaultProvider),
-			Temperature: strconv.FormatFloat(store.DefaultTemperature, 'f', -1, 64), Parallel: "1"}
+			Temperature: strconv.FormatFloat(store.DefaultTemperature, 'f', -1, 64), Parallel: "1", NoThinking: true}
 	} else {
 		cfg, err := w.srv.deps.Store.GetLLMConfig(w.ctx(), id)
 		if err != nil {
@@ -279,7 +281,7 @@ func (w *workspace) editLLM(id uint) {
 		pv.Edit = &llmForm{
 			ID: cfg.ID, Name: cfg.Name, Provider: cfg.Provider, Model: cfg.Model, BaseURL: cfg.BaseURL,
 			HasKey: cfg.APIKey != "", Temperature: strconv.FormatFloat(cfg.Temperature, 'f', -1, 64),
-			Timeout: timeoutText(cfg.TimeoutSeconds), Parallel: strconv.Itoa(max(cfg.MaxParallel, 1)),
+			Timeout: timeoutText(cfg.TimeoutSeconds), Parallel: strconv.Itoa(max(cfg.MaxParallel, 1)), NoThinking: cfg.NoThinking,
 		}
 	}
 	w.touch(rModal)
@@ -291,7 +293,7 @@ func formFromValues(prev *llmForm, v func(string) string) *llmForm {
 		ID: prev.ID, HasKey: prev.HasKey,
 		Name: v("name"), Provider: v("provider"), Model: v("model"), BaseURL: v("base_url"),
 		APIKey: v("api_key"), ClearKey: v("clear_key") != "", Temperature: v("temperature"),
-		Timeout: v("timeout"), Parallel: v("max_parallel"),
+		Timeout: v("timeout"), Parallel: v("max_parallel"), NoThinking: v("no_thinking") != "",
 	}
 }
 

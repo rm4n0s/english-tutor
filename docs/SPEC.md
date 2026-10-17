@@ -157,8 +157,10 @@ A list of all the errors found by the last check sits at the top of the right co
   | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field, with a Show / Hide button next to it (always masked when the form opens) |
   | Temperature | Optional, default 0.2 |
   | Timeout | Optional, in seconds (10 to 3600). Empty or 0 uses the default of each request: 15 minutes for a check, 120 s for an explanation and for alternatives. A value replaces that default for all three kinds of request of this LLM |
+  | No thinking | Check box, ticked by default in the form of a new LLM (LLMs saved before the option existed keep it off). Asks the model to answer at once instead of thinking first, which is much faster for reasoning models. Available for `ollama` and `openai-compatible`; disabled, and never stored, for `anthropic` (its models think only when asked, and the application never asks) |
   | Parallel requests | 1 to 16, default 1. How many chunks of one check are sent at once (section 5.2); 1 sends them one after another |
 
+- **No thinking** works by adding fields to the top level of the JSON body of every request of the LLM, through the HTTP client given to the langchaingo model (`llm` package; a field the body already has is kept). No chat protocol has a standard field for it, so the fields are those of the model families, and a server ignores the ones that are not for it: for `ollama` `"think": false`; for `openai-compatible` `"thinking": {"type": "disabled"}` (GLM, DeepSeek, Kimi), `"enable_thinking": false` (Qwen) and `"chat_template_kwargs": {"enable_thinking": false}` (servers that apply the model's chat template, such as vLLM). The option is a best effort: a server that rejects unknown fields (OpenAI's own API does) answers with an error that is shown as it is, and the option is then switched off. It applies to checks, explanations, alternatives and Test connection.
 - **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).
 - A new configuration starts with the provider `openai-compatible` and an empty Base URL (`llm.DefaultProvider`); the user picks another provider in the form.
 - The Add / Edit form is validated before it is saved (the messages come from `llm.ModelConfig.Validate`) and shows store errors such as a duplicate name without closing. Choosing `ollama` fills in `http://localhost:11434` if the Base URL is empty; switching away from `ollama` clears that default again, so an Anthropic or OpenAI-compatible configuration never inherits a localhost address. The API key field is disabled for `ollama`, and a key typed before switching to `ollama` is not stored.
@@ -405,13 +407,13 @@ Tables (created by numbered migrations, `001_init` first):
 
 | Table | Columns |
 |---|---|
-| `llm_configs` | `id`, `name` (unique), `provider`, `model`, `base_url`, `api_key`, `temperature`, `timeout_seconds`, `max_parallel`, `created_at`, `updated_at` |
+| `llm_configs` | `id`, `name` (unique), `provider`, `model`, `base_url`, `api_key`, `temperature`, `timeout_seconds`, `max_parallel`, `no_thinking`, `created_at`, `updated_at` |
 | `documents` | `id`, `title`, `content`, `created_at`, `updated_at` |
 | `error_events` | `id`, `error_type` (taxonomy id, text), `category`, `snippet`, `source_key`, `fingerprint`, `llm_name`, `created_at`; unique index on (`source_key`, `fingerprint`); index on (`error_type`, `created_at`) |
 | `llm_usage` | `id`, `llm_name`, `kind` (`check`, `explain` or `alternatives`), `input_tokens`, `output_tokens`, `estimated`, `created_at` |
 | `settings` | `key` (primary key), `value` |
 
-`error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`. Migration `004_llm_request_settings` adds `timeout_seconds` and `max_parallel` to `llm_configs` (both 0, meaning the defaults, for LLMs saved before).
+`error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`. Migration `004_llm_request_settings` adds `timeout_seconds` and `max_parallel` to `llm_configs` (both 0, meaning the defaults, for LLMs saved before). Migration `005_llm_no_thinking` adds `no_thinking` (off for LLMs saved before).
 
 Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`, `web_port`, `web_password`. `splitter_sizes` holds four numbers as JSON: the horizontal splitter (editor, right column) then the vertical one (issues list, explanation panel). `window_geometry` is Qt's `saveGeometry()` bytes, base64 encoded. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry, `web_port` 3333, no `web_password`. `web_password` holds the hash made by `web.HashPassword` (`pbkdf2-sha256$<rounds>$<salt>$<hash>`), never the password.
 

@@ -29,7 +29,7 @@ func (s *Store) UpdateLLMConfig(ctx context.Context, cfg *LLMConfig) error {
 		return err
 	}
 	res := s.db.WithContext(ctx).Model(&LLMConfig{ID: cfg.ID}).
-		Select("Name", "Provider", "Model", "BaseURL", "APIKey", "Temperature", "TimeoutSeconds", "MaxParallel").
+		Select("Name", "Provider", "Model", "BaseURL", "APIKey", "Temperature", "TimeoutSeconds", "MaxParallel", "NoThinking").
 		Updates(cfg)
 	if res.Error != nil {
 		if errors.Is(res.Error, gorm.ErrDuplicatedKey) {

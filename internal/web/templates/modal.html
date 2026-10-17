@@ -70,6 +70,8 @@
   <p class="note">How long one request may take before it is given up. Empty uses the default: 15 minutes for a check, 120 s for an explanation or alternatives. Use a longer time for slow models.</p>
   <label>Parallel requests<input type="number" name="max_parallel" min="1" max="{{.MaxParallel}}" step="1" value="{{.Parallel}}"></label>
   <p class="note">How many parts of a long text are checked at the same time. 1 sends them one after another. A higher number is faster but may hit the rate limit of the provider.</p>
+  <label class="check"><input type="checkbox" name="no_thinking" value="1"{{if .NoThinking}} checked{{end}}{{if .NoThinkingDisabled}} disabled{{end}}> No thinking</label>
+  <p class="note">{{.NoThinkingNote}}</p>
   {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
   <p id="llmtest" class="{{if .TestOK}}ok{{else}}error{{end}}" role="status">{{.TestText}}</p>
   <div class="buttons">

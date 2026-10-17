@@ -38,8 +38,11 @@ type LLMConfig struct {
 	// MaxParallel is how many requests of one check may run at once; 0 and 1
 	// mean one at a time.
 	MaxParallel int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// NoThinking asks the model not to think before it answers (see
+	// llm.SupportsNoThinking for the providers it applies to).
+	NoThinking bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 // Timeout returns the request timeout of c, or 0 for the default.
@@ -55,6 +58,7 @@ func (c *LLMConfig) ModelConfig() llm.ModelConfig {
 		BaseURL:     strings.TrimSpace(c.BaseURL),
 		APIKey:      c.APIKey,
 		Temperature: c.Temperature,
+		NoThinking:  c.NoThinking,
 	}
 }
 
