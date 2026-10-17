@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -43,6 +44,9 @@ type Handlers struct {
 	TooltipAt func(pos int) string
 	// NextIssue and PrevIssue are F7 and Shift+F7.
 	NextIssue, PrevIssue func()
+	// Alternative is the Alternative entry of the editor's right-click menu: the
+	// selection, as UTF-16 positions, wants other ways to write it.
+	Alternative func(start, end int)
 
 	// ModifiedChanged reports when the text becomes modified or is marked saved.
 	ModifiedChanged func(modified bool)
@@ -344,6 +348,12 @@ func (w *MainWindow) connect() {
 			w.handlers.CursorMoved(w.editor.TextCursor().Position())
 		}
 	})
+	w.editor.SetContextMenuPolicy(qt.CustomContextMenu)
+	w.editor.OnCustomContextMenuRequested(func(pos *qt.QPoint) {
+		menu := w.buildEditorMenu(pos)
+		defer menu.Delete()
+		menu.ExecWithPos(w.editor.Viewport().MapToGlobalWithQPoint(pos))
+	})
 	w.editor.Viewport().SetMouseTracking(true)
 	w.editor.OnViewportEvent(w.viewportEvent)
 	w.addShortcuts()
@@ -622,6 +632,40 @@ func underlineStyle(s UnderlineStyle) qt.QTextCharFormat__UnderlineStyle {
 	}
 }
 
+// alternativeLabel is the entry the editor's right-click menu gets when text is
+// selected (section 4.2).
+const alternativeLabel = "Alternative"
+
+// selectedRange returns the selection of the editor in UTF-16 units. ok is false
+// when nothing is selected or the selection holds only white space, so there is
+// nothing to rewrite.
+func (w *MainWindow) selectedRange() (start, end int, ok bool) {
+	c := w.editor.TextCursor() // freed by miqt's finalizer; deleting it here would free it twice
+	if !c.HasSelection() || strings.TrimSpace(c.SelectedText()) == "" {
+		return 0, 0, false
+	}
+	return c.SelectionStart(), c.SelectionEnd(), true
+}
+
+// buildEditorMenu is the right-click menu of the editor: Qt's standard menu,
+// plus Alternative when text is selected. The selection is read when the entry
+// is chosen, so it is the one the user saw.
+func (w *MainWindow) buildEditorMenu(pos *qt.QPoint) *qt.QMenu {
+	menu := w.editor.CreateStandardContextMenuWithPosition(pos)
+	if _, _, ok := w.selectedRange(); !ok {
+		return menu
+	}
+	menu.AddSeparator()
+	alt := menu.AddActionWithText(alternativeLabel)
+	alt.SetToolTip("Show other ways to write the selected text")
+	alt.OnTriggered(func() {
+		if start, end, ok := w.selectedRange(); ok && w.handlers.Alternative != nil {
+			w.handlers.Alternative(start, end)
+		}
+	})
+	return menu
+}
+
 // viewportEvent answers the editor's tooltip events from the handler.
 func (w *MainWindow) viewportEvent(super func(ev *qt.QEvent) bool, ev *qt.QEvent) bool {
 	if ev.Type() != qt.QEvent__ToolTip || w.handlers.TooltipAt == nil {
@@ -648,6 +692,42 @@ func (w *MainWindow) MoveCursorTo(pos int) {
 	c.SetPosition(pos)
 	w.editor.SetTextCursor(c)
 	w.editor.EnsureCursorVisible()
+}
+
+// SelectRange selects the text between the UTF-16 positions start and end.
+func (w *MainWindow) SelectRange(start, end int) {
+	c := w.editor.TextCursor()
+	c.SetPosition(start)
+	c.SetPosition2(end, qt.QTextCursor__KeepAnchor)
+	w.editor.SetTextCursor(c)
+}
+
+// EditorMenuLabels returns the labels of the editor's right-click menu as it is
+// now (it depends on the selection); separators are left out.
+func (w *MainWindow) EditorMenuLabels() []string {
+	menu := w.buildEditorMenu(qt.NewQPoint())
+	defer menu.Delete()
+	var out []string
+	for _, a := range menu.Actions() {
+		if !a.IsSeparator() {
+			out = append(out, a.Text())
+		}
+	}
+	return out
+}
+
+// TriggerEditorMenu triggers one entry of the editor's right-click menu by its
+// label, and reports whether the menu has it.
+func (w *MainWindow) TriggerEditorMenu(label string) bool {
+	menu := w.buildEditorMenu(qt.NewQPoint())
+	defer menu.Delete()
+	for _, a := range menu.Actions() {
+		if a.Text() == label {
+			a.Trigger()
+			return true
+		}
+	}
+	return false
 }
 
 // FocusEditor gives the keyboard focus to the editor.

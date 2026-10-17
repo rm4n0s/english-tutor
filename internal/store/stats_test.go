@@ -435,6 +435,7 @@ func TestRecordUsageAndTotals(t *testing.T) {
 	add(2, "claude", analysis.KindCheck, 300, 30, false)
 	add(2, "local", analysis.KindCheck, 80, 8, true)
 	add(1, "local", analysis.KindExplain, 20, 2, false)
+	add(1, "local", analysis.KindAlternatives, 5, 1, false)
 	clock.Set(now)
 
 	tests := []struct {
@@ -444,15 +445,15 @@ func TestRecordUsageAndTotals(t *testing.T) {
 	}{
 		{"all time", AllTime, []UsageTotal{
 			{LLMName: "claude", InputTokens: 1500, OutputTokens: 180},
-			{LLMName: "local", InputTokens: 100, OutputTokens: 10, Estimated: true},
+			{LLMName: "local", InputTokens: 105, OutputTokens: 11, Estimated: true},
 		}},
 		{"30 days", Last30Days, []UsageTotal{
 			{LLMName: "claude", InputTokens: 500, OutputTokens: 80},
-			{LLMName: "local", InputTokens: 100, OutputTokens: 10, Estimated: true},
+			{LLMName: "local", InputTokens: 105, OutputTokens: 11, Estimated: true},
 		}},
 		{"7 days", Last7Days, []UsageTotal{
 			{LLMName: "claude", InputTokens: 300, OutputTokens: 30},
-			{LLMName: "local", InputTokens: 100, OutputTokens: 10, Estimated: true},
+			{LLMName: "local", InputTokens: 105, OutputTokens: 11, Estimated: true},
 		}},
 	}
 	for _, tt := range tests {

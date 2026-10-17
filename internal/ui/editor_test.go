@@ -307,3 +307,89 @@ func TestErrorBanner(t *testing.T) {
 		}
 	})
 }
+
+func TestEditorMenuOffersAlternativeOnlyForASelection(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.SetText("He go to school.\n\nI very like it.")
+		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
+			t.Errorf("no selection, but the menu has Alternative: %q", w.EditorMenuLabels())
+		}
+
+		w.SelectRange(3, 5)
+		labels := w.EditorMenuLabels()
+		if !slices.Contains(labels, "Alternative") || labels[len(labels)-1] != "Alternative" {
+			t.Errorf("menu with a selection = %q, want Alternative last", labels)
+		}
+		for _, std := range []string{"Select All"} {
+			if !slices.ContainsFunc(labels, func(l string) bool { return strings.Contains(l, std) }) {
+				t.Errorf("the standard entries must stay, missing %q in %q", std, labels)
+			}
+		}
+
+		w.SelectRange(2, 3) // a single space
+		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
+			t.Error("a selection of only white space has nothing to rewrite")
+		}
+		w.SelectRange(16, 18) // the blank line between the paragraphs
+		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
+			t.Error("a selection of only line breaks has nothing to rewrite")
+		}
+	})
+}
+
+func TestEditorMenuAlternativeReportsTheSelection(t *testing.T) {
+	type sel struct{ start, end int }
+	tests := []struct {
+		name  string
+		text  string
+		start int
+		end   int
+	}{
+		{"a word", "He go to school.", 3, 5},
+		{"a sentence", "He go to school. I very like it.", 17, 32},
+		{"across paragraphs", "First one.\n\nSecond one.", 0, 22},
+		{"after an emoji (UTF-16 units)", "😀 He go to school.", 3, 8},
+		{"backwards selection", "He go to school.", 5, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWindow(t, func(w *MainWindow) {
+				var got []sel
+				w.SetHandlers(Handlers{Alternative: func(start, end int) { got = append(got, sel{start, end}) }})
+				w.SetText(tt.text)
+				w.SelectRange(tt.start, tt.end)
+				if !w.TriggerEditorMenu("Alternative") {
+					t.Fatal("no Alternative entry")
+				}
+				want := sel{min(tt.start, tt.end), max(tt.start, tt.end)}
+				if !slices.Equal(got, []sel{want}) {
+					t.Fatalf("handler got %v, want %v", got, want)
+				}
+				if text := utf16Slice(tt.text, got[0].start, got[0].end); strings.TrimSpace(text) == "" {
+					t.Errorf("the reported range %v is empty text", got[0])
+				}
+			})
+		})
+	}
+}
+
+func TestEditorMenuWithoutAHandlerDoesNothing(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.SetText("He go to school.")
+		w.SelectRange(3, 5)
+		if !w.TriggerEditorMenu("Alternative") {
+			t.Fatal("no Alternative entry")
+		}
+		if w.TriggerEditorMenu("No such entry") {
+			t.Error("a missing entry cannot be triggered")
+		}
+	})
+}
+
+func TestEditorMenuIsTheCustomMenu(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		if w.editor.ContextMenuPolicy() != qt.CustomContextMenu {
+			t.Error("the editor must use the custom menu, or Alternative is never offered")
+		}
+	})
+}

@@ -45,6 +45,7 @@ func newHarness(t *testing.T, fake *llmtest.Fake) *harness {
 		// first, and run before the window goes), then delete the window.
 		h.a.analyzer.Cancel()
 		h.a.explainer.Cancel()
+		h.a.suggester.Cancel()
 		h.settle()
 		onUI(func() { h.a.win.Widget().Delete() })
 	})

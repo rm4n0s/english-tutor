@@ -11,6 +11,7 @@ A desktop application for practising written English. The user writes a sentence
 **Goals**
 - Write English text in a plain editor with LLM-detected errors underlined, coloured by category.
 - Learn from each error: a markdown explanation and better alternatives, next to the editor.
+- Ask for other ways to write any selected word, sentence or paragraph, from the editor's right-click menu (sections 4.2 and 5.10).
 - Choose which LLM is used from a selector above the editor.
 - Manage the LLM list in a preferences dialog, stored in SQLite.
 - Save the text to a file and to an in-app document list.
@@ -95,6 +96,8 @@ Dependencies and constraints:
 - The tooltip reads `<error type label> · <Category>`, then the issue's short message on the next line (for example "Subject-verb agreement · Grammar" and "Use goes."). A hidden category has no tooltip. The position under the mouse is the nearest cursor position, so pointing at the right half of an issue's last character does not show its tooltip.
 - The cursor moving into an issue (by click or keys) selects it without moving the cursor; selecting an issue from elsewhere (the list, F7) moves the cursor to its start without taking keyboard focus from the widget that has it.
 - Editing invalidates issues (section 5.5).
+- **Right-click menu.** The editor shows Qt's standard menu (Undo, Redo, Cut, Copy, Paste, Delete, Select All), and when text is selected it adds one more entry at the end, **Alternative**. It is not offered with no selection, or with a selection of only white space or line breaks. Choosing it opens the Alternatives window (below) for the selection, which can be a word or several paragraphs (at most 600 words, section 5.10). The selection is read when the entry is chosen, in UTF-16 units like every other editor position.
+- **Alternatives window.** A `QDialog` that is not modal, so the user can go on working in the main window while it is open. It shows the selected text (cut to 400 characters if longer), a line with the state, and a list with one row per alternative, in the order the model gave them. States: *loading* ("Looking for alternatives..." and a busy indicator), *ready* ("3 alternatives", the first row selected; "No alternatives found." for an empty list) and *failed* (the message of the error in red, "Could not get alternatives." and a **Retry** button). **Copy**, or a double click on a row, puts that alternative on the clipboard; **Close** closes the window, and closing it by any means cancels a request that still runs, without an error. Only one window is open at a time: choosing Alternative again replaces it, and the answer of the earlier request is dropped. The alternatives are untrusted LLM output and are shown as plain text, never as markdown or HTML (section 5.9). The window never changes the text of the editor, the issues or the statistics.
 
 ### 4.3 Issues list
 
@@ -155,7 +158,7 @@ A list of all the errors found by the last check sits at the top of the right co
 - The Add / Edit form is validated before it is saved (the messages come from `llm.ModelConfig.Validate`) and shows store errors such as a duplicate name without closing. Choosing `ollama` fills in `http://localhost:11434` if the Base URL is empty; switching away from `ollama` clears that default again, so an Anthropic or OpenAI-compatible configuration never inherits a localhost address. The API key field is disabled for `ollama`, and a key typed before switching to `ollama` is not stored.
 - **General tab:** auto-check on/off (default off), auto-check delay in seconds (default 3, used only when auto-check is on; the field is disabled while auto-check is off), editor font size. Changes apply and are saved at once; there is no OK button, only Close.
 - **Web server tab:** the state of the web server with a Start / Stop button, the port (default 3333) and the password (section 4.7). A new port or password is saved when the field is left and restarts a server that runs.
-- The Add / Edit form shows a privacy note, "the text you write is sent to <server> when you check it or ask for an explanation", unless the server is on this computer (the host is `localhost`, `127.x.x.x` or `::1`, or Ollama with its default address). For Anthropic with no base URL it names Anthropic's server.
+- The Add / Edit form shows a privacy note, "the text you write is sent to <server> when you check it, ask for an explanation or ask for alternatives", unless the server is on this computer (the host is `localhost`, `127.x.x.x` or `::1`, or Ollama with its default address). For Anthropic with no base URL it names Anthropic's server.
 - Deleting the currently selected LLM selects another one (the first by name), or leaves the selector empty if none remain; the new choice is remembered.
 
 ### 4.6 Statistics dialog
@@ -203,7 +206,7 @@ The application can show its window in a web browser, with the same functions: t
 - *Open* is the browser's file chooser; the file is uploaded, read with the rules of section 7 (UTF-8, no NUL byte, at most 10 MB, the file's line ending remembered) and shown. A browser does not tell the server where a file lives, so an opened text starts a new `session:` source instead of a `file:` one.
 - *Save* and *Save As* download the text as a file; the browser decides where it goes. Save uses the name of the text (a text without one asks for it, proposing its first line, and `.txt` is added when the name has no extension); Save As asks every time. The file is sent once from an address only that page knows and is not kept.
 - Before New, Open and opening a library document, a text with unsaved changes asks `Discard them?` in the browser; there is no Save choice in that question.
-- Right-click menus are replaced by the buttons of the explanation panel, `Ctrl+N` and `Ctrl+O` are left to the browser.
+- Right-click menus are replaced by the buttons of the explanation panel, `Ctrl+N` and `Ctrl+O` are left to the browser. The Alternatives window (section 4.2) is not part of the browser version in v1.
 - API keys are never sent to the browser. The edit form of an LLM says that a key is stored and keeps it when the field is left empty; a box removes it. The port and the password are set only in the window.
 - The explanation is untrusted markdown (section 5.9). A small renderer in `internal/web` turns it into HTML: it escapes everything first, shows raw HTML and images as text, and makes a link only for `http` and `https` addresses with a host, opened in a new tab (`noopener`) after a confirmation that shows the whole address. It is fuzzed to write no tag but its own.
 
@@ -331,10 +334,10 @@ Counting only makes sense if the same mistake always gets the same name. LLMs in
 
 ### 5.8 Token usage
 
-- Every LLM request (each check chunk and each explanation; Test connection is excluded) records its input and output token counts.
+- Every LLM request (each check chunk, each explanation and each alternatives request; Test connection is excluded) records its input and output token counts.
 - langchaingo returns provider usage in the response's `GenerationInfo` map, and the key names differ per provider. `internal/llm` normalises them into `Usage{InputTokens, OutputTokens, Estimated}`. With langchaingo v0.1.15 the keys are `PromptTokens` / `CompletionTokens` (OpenAI-compatible and Ollama) and `InputTokens` / `OutputTokens` (Anthropic); a test runs the real clients against local servers to guard them. Streamed responses use the same extraction; a provider that sends no usage while streaming (or only zeros) falls under the next rule, and this has not been checked against real servers. If a provider reports nothing, both numbers are estimated (about 4 characters per token) and `Estimated` is true; estimated numbers are shown with a `~`.
 - The status bar shows the last request and the session totals, for example `last: 812 in / 164 out · session: 5.2k in / 1.1k out`. Session totals reset when the app starts.
-- Each request is also saved in `llm_usage` (LLM name, kind `check` or `explain`, input, output, estimated flag, timestamp). The Token usage tab of the Statistics dialog sums it per LLM for all time, 30 days and 7 days.
+- Each request is also saved in `llm_usage` (LLM name, kind `check`, `explain` or `alternatives`, input, output, estimated flag, timestamp). The Token usage tab of the Statistics dialog sums it per LLM for all time, 30 days and 7 days.
 - No money amount is calculated: prices differ per provider and change. Only tokens are shown.
 - A cancelled request records the usage it reports; if it reports none, nothing is recorded.
 - `store.Stats.RecordUsage` implements `analysis.UsageRecorder`; `UsageTotals` sums per LLM for a period (an `Estimated` flag is set when any request in the sum was estimated) and `ResetUsage` clears the table.
@@ -345,7 +348,18 @@ The LLMs in this app have no tools: no file, network or code access. Text in an 
 
 - The prompt puts the user's text between delimiter lines that contain a random per-request token (so the text cannot contain the closing delimiter by accident), and tells the model that everything between them is text to analyse, never instructions.
 - Output is validated before it is used: JSON must match the contract, snippets that are not in the text are dropped, and unknown error types become `_other`.
+- The alternatives are untrusted text too. The window shows them as plain text, so markup in them is never interpreted, and the Copy button copies exactly what a row shows.
 - The explanation is untrusted markdown. Remote images and other remote content are never fetched, and clicking a link (http/https only) first shows a confirmation dialog with the full URL.
+
+### 5.10 Alternatives
+
+When the user chooses **Alternative** on a selection (section 4.2), a request asks the selected LLM for other ways to write it. It is a plain request, not a stream: the answer is a short list.
+
+- **Prompt.** A coach, not a checker: the system prompt asks for between 3 and 5 alternatives, each a replacement for the whole selected text that fits in its place (the same meaning, tone and grammatical form: a word for a word or a short phrase, a sentence or paragraph for a full rewrite), different from each other and from the selection, and correct English even when the selection has a mistake. The selection and its context are the user's text and are delimited like in the check prompt, with a random per-request token (section 5.9). The context is the whole text if it has at most 600 words, otherwise the paragraph around the selection (as in section 5.4).
+- **Reply.** One JSON object, `{"alternatives": ["...", "..."]}`, parsed as tolerantly as the check reply (fences and prose around it are ignored, a bare array of strings is accepted). Entries are trimmed; empty ones, repeats and the selected text itself (ignoring case) are dropped; at most eight are kept and an entry over 6000 characters is dropped. A reply that is not valid, or has no usable alternative, is retried once with a "return valid JSON only" reminder, and then fails with `LLMResponseInvalid`. The reply is never put in error metadata or logs.
+- **Limits.** A selection that is empty or only white space is `SelectionEmpty`, and one over 600 words is `SelectionTooLong` ("select at most 600"); neither reaches the model.
+- **One at a time.** `analysis.Suggester` runs one request at a time: a new request, closing the window or quitting cancels the one before it. Cancelling is not an error. The timeout is 120 s, like an explanation, and gives `LLMCallTimeout`; any other failure is `LLMCallFailed`. Both are shown in the window, not in the banner, and logged.
+- **Tokens.** The request, with its retry as one record, is counted in the status bar and saved with kind `alternatives` (section 5.8). Nothing is recorded in the mistake statistics.
 
 ## 6. Concurrency
 
@@ -386,7 +400,7 @@ Tables (created by numbered migrations, `001_init` first):
 | `llm_configs` | `id`, `name` (unique), `provider`, `model`, `base_url`, `api_key`, `temperature`, `created_at`, `updated_at` |
 | `documents` | `id`, `title`, `content`, `created_at`, `updated_at` |
 | `error_events` | `id`, `error_type` (taxonomy id, text), `category`, `snippet`, `source_key`, `fingerprint`, `llm_name`, `created_at`; unique index on (`source_key`, `fingerprint`); index on (`error_type`, `created_at`) |
-| `llm_usage` | `id`, `llm_name`, `kind` (`check` or `explain`), `input_tokens`, `output_tokens`, `estimated`, `created_at` |
+| `llm_usage` | `id`, `llm_name`, `kind` (`check`, `explain` or `alternatives`), `input_tokens`, `output_tokens`, `estimated`, `created_at` |
 | `settings` | `key` (primary key), `value` |
 
 `error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`.
@@ -448,7 +462,9 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `LLMClientCreateFailed` | `llm` | langchaingo client construction fails |
 | `LLMCallFailed` | `analysis` | the request fails (network, auth, rate limit) |
 | `LLMCallTimeout` | `analysis` | the request exceeds its timeout |
-| `LLMResponseInvalid` | `analysis` | the reply is not valid JSON for the contract, even after one retry |
+| `LLMResponseInvalid` | `analysis` | the reply is not valid JSON for the contract (or, for alternatives, has no usable alternative), even after one retry |
+| `SelectionEmpty` | `analysis` | alternatives are asked for a selection that is empty or only white space |
+| `SelectionTooLong` | `analysis` | the selection for alternatives has more than 600 words |
 | `FileReadFailed` / `FileWriteFailed` | `app` | file open or save fails (also: file larger than 10 MB, application closing) |
 | `FileNotUTF8` | `app` | opened file is not valid UTF-8, or contains a NUL byte |
 
@@ -473,6 +489,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 - **Qt widgets:** tests of windows and dialogs run with `QT_QPA_PLATFORM=offscreen` through `internal/uitest` (the Qt event loop runs on the main thread and each test reaches it with `uitest.OnUI`), so no display is needed. They check widget state, handlers, persistence and the layout (including a screenshot taken during development). If the offscreen plugin is not installed they are skipped with a message.
 - **UI:** the logic that does not need a display (edit-rebasing of issues, the shared issue state with its selection used by the editor and the list, category filtering, list row text and ordering, state machine of the explanation panel, debounce) lives in plain Go types and is unit tested. A small manual smoke checklist covers drawing and dialogs.
 - **Counting:** a second check where the fake LLM returns different context or a different error type for the same snippet records nothing new; two identical snippets in one text count twice; Save As moves the events to the new source without duplicates.
+- **Alternatives:** the prompt (delimiters with a random token, the context rule), the parser (valid, fenced, bare array, repeats, the selection itself, over-long entries, invalid) with a fuzz test, one retry on invalid JSON with both requests' usage in one record, every failure route, a selection that is empty or too long never reaching the model, cancel and replacement by a newer request; the editor menu (Alternative only with a real selection, UTF-16 positions after an emoji, a backwards selection); the window states, Copy and Retry; and the whole flow from the menu with a fake LLM, including closing the window mid-request.
 - **Cancel:** cancelling a check leaves underlines and events unchanged and produces no error; cancelling mid-chunk discards finished chunks; a timeout still returns `LLMCallTimeout`.
 - **Token usage:** each provider's `GenerationInfo` shape is normalised correctly (using recorded sample responses); a missing usage gives an estimate with the flag set; session totals and the 7 / 30 day sums are right.
 - **Untrusted text:** a text containing the closing delimiter or "ignore previous instructions" still produces a prompt with a unique random delimiter and the same parsing path; links other than http/https are never opened.

@@ -114,7 +114,7 @@ func PrivacyNote(provider, baseURL string) string {
 	} else if provider == "anthropic" {
 		server = "Anthropic's server"
 	}
-	return "Privacy: the text you write is sent to " + server + " when you check it or ask for an explanation."
+	return "Privacy: the text you write is sent to " + server + " when you check it, ask for an explanation or ask for alternatives."
 }
 
 func isLocalHost(host string) bool {

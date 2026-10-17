@@ -34,8 +34,9 @@ type UsageKind string
 
 // The kinds of request that use tokens. Test connection is not recorded.
 const (
-	KindCheck   UsageKind = "check"
-	KindExplain UsageKind = "explain"
+	KindCheck        UsageKind = "check"
+	KindExplain      UsageKind = "explain"
+	KindAlternatives UsageKind = "alternatives"
 )
 
 // UsageRecord is the token usage of one request, ready to be stored.

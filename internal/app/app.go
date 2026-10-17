@@ -36,6 +36,7 @@ type App struct {
 	stats     *store.Stats
 	analyzer  *analysis.Analyzer
 	explainer *analysis.Explainer
+	suggester *analysis.Suggester
 	win       *ui.MainWindow
 	state     *issues.State
 
@@ -86,6 +87,11 @@ type App struct {
 	typeCounts     map[string]int // all-time mistakes per error type, for the row badges
 	lastCheckID    uint64
 
+	// The Alternatives window that is open, if any, and the number of the latest
+	// request made for it (UI thread only).
+	altDlg *ui.AlternativesDialog
+	altSeq uint64
+
 	// bgN counts the goroutines started by goBackground. A mutex and a
 	// condition variable are used instead of a WaitGroup because goroutines are
 	// started from UI callbacks while another goroutine may be waiting.
@@ -106,6 +112,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		stats:      stats,
 		analyzer:   analysis.NewAnalyzer(analysis.AnalyzerConfig{Usage: stats, Logger: log}),
 		explainer:  analysis.NewExplainer(analysis.ExplainerConfig{Usage: stats, Logger: log}),
+		suggester:  analysis.NewSuggester(analysis.SuggesterConfig{Usage: stats, Logger: log}),
 		typeCounts: map[string]int{},
 		win:        ui.NewMainWindow(),
 		state:      issues.New(),
@@ -160,6 +167,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		},
 		CursorMoved:    a.onCursorMoved,
 		TooltipAt:      a.tooltipAt,
+		Alternative:    a.onAlternative,
 		IssueSelected:  func(id int) { a.state.Select(id) },
 		IssueActivated: a.onIssueActivated,
 		NotAnError:     a.onNotAnError,
@@ -300,6 +308,7 @@ func (a *App) onClosed() {
 func (a *App) stopWork() {
 	a.analyzer.Cancel()
 	a.explainer.Cancel()
+	a.suggester.Cancel()
 	a.autoTimer.Stop()
 	a.renderTimer.Stop()
 	a.web.Stop()
