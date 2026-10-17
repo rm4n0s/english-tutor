@@ -525,3 +525,70 @@ func TestEditorBusyCover(t *testing.T) {
 		}
 	})
 }
+
+func TestCopyPutsOnlyPlainTextOnTheClipboard(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		start, end int
+		want       string
+	}{
+		{"paragraphs and a blank line", "Line one.\n\nSecond paragraph.\nThird line.", 0, 40, "Line one.\n\nSecond paragraph.\nThird line."},
+		{"part of a line", "He go to school.", 3, 5, "go"},
+		{"after an emoji (UTF-16 units)", "😀 He go.\nNext.", 3, 15, "He go.\nNext."},
+		{"backwards selection", "One.\nTwo.", 9, 0, "One.\nTwo."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWindow(t, func(w *MainWindow) {
+				w.SetText(tt.text)
+				w.SelectRange(tt.start, tt.end)
+				w.editor.Copy()
+				data := qt.QGuiApplication_Clipboard().MimeData()
+				// HTML, markdown and ODF make other programs paste the text as one
+				// line, with Qt's style sheet in front of it.
+				if got := data.Formats(); !slices.Equal(got, []string{"text/plain"}) {
+					t.Errorf("clipboard formats = %q, want only text/plain", got)
+				}
+				if got := data.Text(); got != tt.want {
+					t.Errorf("clipboard text = %q, want %q", got, tt.want)
+				}
+				if data.HasHtml() {
+					t.Error("the clipboard must not hold HTML")
+				}
+			})
+		})
+	}
+}
+
+func TestCutPutsOnlyPlainTextOnTheClipboard(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.SetText("Keep.\n\nMove this.\nAnd this.")
+		w.SelectRange(7, 27)
+		w.editor.Cut()
+		data := qt.QGuiApplication_Clipboard().MimeData()
+		if got := data.Formats(); !slices.Equal(got, []string{"text/plain"}) {
+			t.Errorf("clipboard formats = %q, want only text/plain", got)
+		}
+		if got := data.Text(); got != "Move this.\nAnd this." {
+			t.Errorf("clipboard text = %q", got)
+		}
+		if got := w.Text(); got != "Keep.\n\n" {
+			t.Errorf("text after the cut = %q", got)
+		}
+	})
+}
+
+func TestCopyAndPasteKeepTheParagraphs(t *testing.T) {
+	const text = "First paragraph.\n\nSecond one.\nThird line."
+	withWindow(t, func(w *MainWindow) {
+		w.SetText(text)
+		w.SelectRange(0, 41)
+		w.editor.Copy()
+		w.SetText("")
+		w.editor.Paste()
+		if got := w.Text(); got != text {
+			t.Errorf("pasted %q, want %q", got, text)
+		}
+	})
+}

@@ -399,6 +399,7 @@ func (w *MainWindow) connect() {
 		defer menu.Delete()
 		menu.ExecWithPos(w.editor.Viewport().MapToGlobalWithQPoint(pos))
 	})
+	w.editor.OnCreateMimeDataFromSelection(w.plainMimeData)
 	w.editor.Viewport().SetMouseTracking(true)
 	w.editor.OnViewportEvent(w.viewportEvent)
 	w.addShortcuts()
@@ -735,6 +736,18 @@ func (w *MainWindow) buildEditorMenu(pos *qt.QPoint) *qt.QMenu {
 		}
 	})
 	return menu
+}
+
+// plainMimeData is what copy, cut and drag take from the editor: the selected
+// text and nothing else. Qt's own data for a selection also offers HTML, markdown
+// and ODF, and a program that prefers HTML pastes the paragraphs as one line and
+// shows the style sheet Qt puts in front of them (p, li { white-space: ... }).
+// Qt owns the returned data. The parameter is the base implementation, which is
+// not needed.
+func (w *MainWindow) plainMimeData(_ func() *qt.QMimeData) *qt.QMimeData {
+	data := qt.NewQMimeData()
+	data.SetText(w.editor.TextCursor().Selection().ToPlainText())
+	return data
 }
 
 // viewportEvent answers the editor's tooltip events from the handler.
