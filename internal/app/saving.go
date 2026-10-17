@@ -81,6 +81,7 @@ func (a *App) resetText(text string) {
 	a.explainSeq++
 	a.checking = false
 	a.win.SetChecking(false)
+	a.win.SetEditorBusy(false)
 	a.autoTimer.Stop()
 	a.status = ui.StatusIdle
 	a.unplaced = 0

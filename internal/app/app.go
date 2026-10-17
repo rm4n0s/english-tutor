@@ -168,6 +168,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		CursorMoved:    a.onCursorMoved,
 		TooltipAt:      a.tooltipAt,
 		Alternative:    a.onAlternative,
+		CheckSelection: a.onCheckSelection,
 		IssueSelected:  func(id int) { a.state.Select(id) },
 		IssueActivated: a.onIssueActivated,
 		NotAnError:     a.onNotAnError,

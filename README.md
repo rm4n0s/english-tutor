@@ -13,6 +13,7 @@ The full design is in [docs/SPEC.md](docs/SPEC.md).
 - **Explanations** streamed as markdown: what is wrong, why, better ways, and a tip. Cancel, Regenerate and Retry are one click away.
 - **Alternatives:** select a word, a sentence or a paragraph, right-click and choose **Alternative** to see other ways to write it in a list (double-click one to replace the selected text with it, or press Copy to put it on the clipboard). Not available in the browser version.
 - **Statistics:** every mistake you make is counted by error type (repeats count every time), with 7 and 30 day views, examples of what you wrote, and a **Not an error** button for when the LLM was wrong. Token usage per LLM is shown in the status bar and in the Statistics dialog.
+- **Check a selection:** select a sentence, right-click and choose **Check** (under Alternative) to check only that text; the issues in it are replaced and the rest stay. While a check runs a loading screen covers the editor.
 - **Check when you want:** the Check button always works; auto-check (after you pause typing) is optional and off by default.
 - **Saving:** plain text and markdown files, and a library of documents in the app. Unsaved changes are asked about.
 
@@ -145,6 +146,7 @@ The automated tests use fake LLMs and an offscreen display. Before a release, ru
 14. Press **Start web server** (or the tray item) and open the page in a browser: write, Check, click an underline and a row, press `F7`, open Preferences, Statistics and the Library, upload a file with Open and download with Save. Start a second tab: it has its own text. Press **Stop web server**: the pages stop answering.
 15. Occupy port 3333 with another program and press **Start web server**: a banner names the port. Set a password on the Web server tab and open the page from another computer: it asks for the password, and five wrong ones lock that computer out for a while.
 16. Select a single word, right-click and choose **Alternative**: the window opens at once with a busy indicator and then lists a few replacements. Do the same with a paragraph, and with only a space selected (no such entry). Double-click a row: the selection is replaced and the window closes; `Ctrl+Z` brings the old text back. Press Copy on another row and paste. Close the window while it is still loading: nothing is reported as an error.
+17. Select the second sentence of a checked text, right-click and choose **Check**: a grey layer with a busy indicator covers the editor, typing does nothing, and the status bar says `Checking...`. When it ends the layer goes; underlines in the other sentences are unchanged and the ones in the selection are the new result. Do it again and press **Cancel** while it runs: the layer goes and nothing changes. With only a space selected, or no LLM configured, there is no usable Check entry.
 
 ## Known limits
 

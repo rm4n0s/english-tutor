@@ -312,14 +312,14 @@ func TestErrorBanner(t *testing.T) {
 func TestEditorMenuOffersAlternativeOnlyForASelection(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
 		w.SetText("He go to school.\n\nI very like it.")
-		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
-			t.Errorf("no selection, but the menu has Alternative: %q", w.EditorMenuLabels())
+		if labels := w.EditorMenuLabels(); slices.Contains(labels, "Alternative") || slices.Contains(labels, "Check") {
+			t.Errorf("no selection, but the menu has Alternative or Check: %q", labels)
 		}
 
 		w.SelectRange(3, 5)
 		labels := w.EditorMenuLabels()
-		if !slices.Contains(labels, "Alternative") || labels[len(labels)-1] != "Alternative" {
-			t.Errorf("menu with a selection = %q, want Alternative last", labels)
+		if n := len(labels); n < 2 || labels[n-2] != "Alternative" || labels[n-1] != "Check" {
+			t.Errorf("menu with a selection = %q, want Alternative then Check last", labels)
 		}
 		for _, std := range []string{"Select All"} {
 			if !slices.ContainsFunc(labels, func(l string) bool { return strings.Contains(l, std) }) {
@@ -328,12 +328,12 @@ func TestEditorMenuOffersAlternativeOnlyForASelection(t *testing.T) {
 		}
 
 		w.SelectRange(2, 3) // a single space
-		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
-			t.Error("a selection of only white space has nothing to rewrite")
+		if labels := w.EditorMenuLabels(); slices.Contains(labels, "Alternative") || slices.Contains(labels, "Check") {
+			t.Error("a selection of only white space has nothing to rewrite or check")
 		}
 		w.SelectRange(16, 18) // the blank line between the paragraphs
-		if slices.Contains(w.EditorMenuLabels(), "Alternative") {
-			t.Error("a selection of only line breaks has nothing to rewrite")
+		if labels := w.EditorMenuLabels(); slices.Contains(labels, "Alternative") || slices.Contains(labels, "Check") {
+			t.Error("a selection of only line breaks has nothing to rewrite or check")
 		}
 	})
 }
@@ -372,6 +372,58 @@ func TestEditorMenuAlternativeReportsTheSelection(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestEditorMenuCheckReportsTheSelection(t *testing.T) {
+	type sel struct{ start, end int }
+	tests := []struct {
+		name  string
+		text  string
+		start int
+		end   int
+	}{
+		{"a sentence", "He go to school. I very like it.", 17, 32},
+		{"after an emoji (UTF-16 units)", "😀 He go to school.", 3, 8},
+		{"backwards selection", "He go to school.", 5, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withWindow(t, func(w *MainWindow) {
+				var got, alternatives []sel
+				w.SetHandlers(Handlers{
+					CheckSelection: func(start, end int) { got = append(got, sel{start, end}) },
+					Alternative:    func(start, end int) { alternatives = append(alternatives, sel{start, end}) },
+				})
+				w.SetLLMs(choices(), 3)
+				w.SetText(tt.text)
+				w.SelectRange(tt.start, tt.end)
+				if !w.TriggerEditorMenu("Check") {
+					t.Fatal("no Check entry")
+				}
+				want := sel{min(tt.start, tt.end), max(tt.start, tt.end)}
+				if !slices.Equal(got, []sel{want}) || len(alternatives) != 0 {
+					t.Fatalf("Check handler got %v, Alternative got %v, want only Check with %v", got, alternatives, want)
+				}
+			})
+		})
+	}
+}
+
+func TestEditorMenuCheckNeedsAnLLM(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.SetText("He go to school.")
+		w.SelectRange(3, 5)
+		if w.EditorMenuEnabled("Check") {
+			t.Error("with no LLM there is nothing to check with")
+		}
+		if !w.EditorMenuEnabled("Alternative") {
+			t.Error("Alternative reports its own error, so it stays enabled")
+		}
+		w.SetLLMs(choices(), 3)
+		if !w.EditorMenuEnabled("Check") {
+			t.Error("Check should be enabled once an LLM exists")
+		}
+	})
 }
 
 func TestEditorMenuWithoutAHandlerDoesNothing(t *testing.T) {
@@ -437,4 +489,39 @@ func TestReplaceRange(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestEditorBusyCover(t *testing.T) {
+	withWindow(t, func(w *MainWindow) {
+		w.Show()
+		w.SetText("He go to school.")
+		if w.EditorBusy() || !w.busy.IsHidden() || w.editor.IsReadOnly() {
+			t.Fatal("the editor starts free")
+		}
+
+		w.SetEditorBusy(true)
+		if !w.EditorBusy() || !w.editor.IsReadOnly() {
+			t.Error("the cover must be up and the text read-only while busy")
+		}
+		if w.busyLabel.Text() != "Checking..." {
+			t.Errorf("label = %q", w.busyLabel.Text())
+		}
+		w.TypeIntoEditor("x")
+		if w.Text() != "He go to school." {
+			t.Errorf("typing changed the text under the cover: %q", w.Text())
+		}
+		vp, cover := w.editor.Viewport().Rect(), w.busy.Geometry()
+		if cover.Width() != vp.Width() || cover.Height() != vp.Height() || cover.X() != 0 || cover.Y() != 0 {
+			t.Errorf("cover %dx%d at %d,%d does not fill the viewport %dx%d", cover.Width(), cover.Height(), cover.X(), cover.Y(), vp.Width(), vp.Height())
+		}
+
+		w.SetEditorBusy(false)
+		if w.EditorBusy() || w.editor.IsReadOnly() {
+			t.Error("the cover must go and the text be editable again")
+		}
+		w.TypeIntoEditor("x")
+		if w.Text() != "He go to school.x" {
+			t.Errorf("typing after the cover: %q", w.Text())
+		}
+	})
 }

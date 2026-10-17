@@ -36,14 +36,36 @@ func newSessionKey() string {
 // does not, because half-written text would produce counts for half-written
 // sentences (section 5.7). Only the request runs off the UI thread.
 func (a *App) startCheck(manual bool) {
-	text := a.win.Text()
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(a.win.Text()) == "" {
 		if manual {
 			a.status = ui.StatusIdle
 			a.win.SetStatus("Nothing to check yet. Write some text first.")
 		}
 		return
 	}
+	a.beginCheck(manual, nil)
+}
+
+// checkScope is the part of the text a check covers: the bytes [start, end).
+type checkScope struct{ start, end int }
+
+// onCheckSelection is the Check entry of the editor's right-click menu: it checks
+// only the selection, given in UTF-16 units (section 5.1). It is a manual check.
+func (a *App) onCheckSelection(start, end int) {
+	text := a.win.Text()
+	um := analysis.NewUTF16Map(text)
+	scope := checkScope{start: um.ByteOffset(start), end: um.ByteOffset(end)}
+	if scope.start >= scope.end || strings.TrimSpace(text[scope.start:scope.end]) == "" {
+		return
+	}
+	a.beginCheck(true, &scope)
+}
+
+// beginCheck starts a check of the whole text, or of scope when it is set. A
+// manual check puts the loading screen over the editor, so that the text stays as
+// it is until the result comes; an auto-check does not, because it fires while the
+// user is about to go on typing.
+func (a *App) beginCheck(manual bool, scope *checkScope) {
 	if a.win.SelectedLLMID() == 0 {
 		return
 	}
@@ -53,18 +75,28 @@ func (a *App) startCheck(manual bool) {
 		return
 	}
 
+	text := a.win.Text()
+	sent, offset := text, 0
+	if scope != nil {
+		sent, offset = text[scope.start:scope.end], scope.start
+	}
 	rev := a.state.BeginCheck()
 	a.checkSeq++
 	seq := a.checkSeq
 	a.checking = true
 	a.status = ui.StatusChecking
 	a.win.SetChecking(true)
+	a.win.SetEditorBusy(manual)
 	a.win.ClearError()
 	a.refreshStatus()
 
 	a.goBackground(func() {
-		res, err := a.analyzer.Check(a.ctx, m, text)
-		mainthread.Start(func() { a.finishCheck(seq, rev, manual, m.Name, text, res, err) })
+		res, err := a.analyzer.Check(a.ctx, m, sent)
+		// The locator counts bytes from the start of what was sent.
+		var placed analysis.LocateResult
+		placed.Append(res.LocateResult, offset)
+		res.LocateResult = placed
+		mainthread.Start(func() { a.finishCheck(seq, rev, manual, scope, m.Name, text, res, err) })
 	})
 }
 
@@ -82,13 +114,17 @@ func (a *App) currentModel() (analysis.Model, error) {
 }
 
 // finishCheck runs on the UI thread when a check has ended.
-func (a *App) finishCheck(seq uint64, rev uint64, manual bool, llmName, text string, res analysis.CheckResult, err error) {
+//
+// scope is the part of the text that was checked, nil for all of it; the offsets of
+// res are bytes of text either way.
+func (a *App) finishCheck(seq uint64, rev uint64, manual bool, scope *checkScope, llmName, text string, res analysis.CheckResult, err error) {
 	a.addUsage(res.Usage) // the tokens were spent whatever happened next
 	if seq != a.checkSeq {
 		return // a newer check has started; it owns the window now
 	}
 	a.checking = false
 	a.win.SetChecking(false)
+	a.win.SetEditorBusy(false)
 
 	switch {
 	case err != nil:
@@ -99,9 +135,7 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, llmName, text str
 		a.state.AbortCheck()
 		a.status = ui.StatusCancelled
 	default:
-		out := a.state.FinishCheck(rev, issues.FromPlaced(text, res.Placed))
-		a.unplaced = res.Unplaced
-		a.resultRecorded = manual
+		out := a.storeResult(rev, manual, scope, text, res)
 		a.status = ui.StatusIdle
 		if out.Discarded {
 			a.status = ui.StatusDiscarded
@@ -111,6 +145,30 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, llmName, text str
 		}
 	}
 	a.refreshStatus()
+}
+
+// storeResult gives the issues of a finished check to the issue state: all of them
+// replace the old ones, or, for a check of part of the text, only those in that
+// part do (section 5.1).
+func (a *App) storeResult(rev uint64, manual bool, scope *checkScope, text string, res analysis.CheckResult) issues.Outcome {
+	items := issues.FromPlaced(text, res.Placed)
+	if scope == nil {
+		a.unplaced = res.Unplaced
+		a.resultRecorded = manual
+		return a.state.FinishCheck(rev, items)
+	}
+	um := analysis.NewUTF16Map(text)
+	checked := issues.Range{Start: um.Offset(scope.start), End: um.Offset(scope.end)}
+	// The issues outside the selection come from an earlier check; the statistics
+	// have them only if that check was manual (and these issues are manual too).
+	before := len(a.state.Items())
+	recorded := manual && (a.resultRecorded || before == 0)
+	out := a.state.FinishRangeCheck(rev, checked, items)
+	if !out.Discarded {
+		a.unplaced = res.Unplaced
+		a.resultRecorded = recorded
+	}
+	return out
 }
 
 func (a *App) checkFailed(err error) {

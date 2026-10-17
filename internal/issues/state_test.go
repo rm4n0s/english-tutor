@@ -529,3 +529,131 @@ func TestResetDropsAPendingCheck(t *testing.T) {
 		t.Errorf("outcome = %+v", out)
 	}
 }
+
+func TestFinishRangeCheck(t *testing.T) {
+	// threeItems: grammar [0,5), vocabulary [10,15), syntax [20,25).
+	tests := []struct {
+		name    string
+		checked Range
+		result  []Item
+		want    []Range
+	}{
+		{"nothing found clears the range only", Range{8, 17}, nil, []Range{{0, 5}, {20, 25}}},
+		{"the result replaces the issues in the range", Range{8, 17}, []Item{item("article", 11, 13)}, []Range{{0, 5}, {11, 13}, {20, 25}}},
+		{"a result before the others keeps the order", Range{26, 40}, []Item{item("article", 30, 33)}, []Range{{0, 5}, {10, 15}, {20, 25}, {30, 33}}},
+		{"an issue the range cuts in half is replaced", Range{12, 22}, []Item{item("article", 16, 18)}, []Range{{0, 5}, {16, 18}}},
+		{"an issue that only touches the range stays", Range{5, 10}, []Item{item("article", 6, 8)}, []Range{{0, 5}, {6, 8}, {10, 15}, {20, 25}}},
+		{"the whole text is a full check", Range{0, 30}, []Item{item("article", 1, 2)}, []Range{{1, 2}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := checked(t, threeItems())
+			rev := s.BeginCheck()
+			out := s.FinishRangeCheck(rev, tt.checked, tt.result)
+			if out.Stale || out.Discarded || out.Shown != len(tt.result) {
+				t.Fatalf("outcome = %+v", out)
+			}
+			if got := ranges(s.Items()); !slices.Equal(got, tt.want) {
+				t.Errorf("ranges = %v, want %v", got, tt.want)
+			}
+			for i, it := range s.Items() {
+				if it.ID != i+1 {
+					t.Errorf("IDs must be 1..N, got %d at %d", it.ID, i)
+				}
+			}
+			if s.Phase() != Checked {
+				t.Errorf("phase = %v, want Checked", s.Phase())
+			}
+		})
+	}
+}
+
+func TestFinishRangeCheckOnAnUncheckedText(t *testing.T) {
+	s := New()
+	rev := s.BeginCheck()
+	s.FinishRangeCheck(rev, Range{3, 9}, []Item{item("article", 4, 6)})
+	if got := ranges(s.Items()); !slices.Equal(got, []Range{{4, 6}}) || s.Phase() != Checked {
+		t.Errorf("ranges %v, phase %v", got, s.Phase())
+	}
+}
+
+func TestFinishRangeCheckAnnouncesANewResult(t *testing.T) {
+	s := checked(t, threeItems())
+	s.Select(2)
+	firstCheck := s.CheckID()
+	rec := &recorder{}
+	s.Subscribe(rec.observe)
+
+	rev := s.BeginCheck()
+	s.FinishRangeCheck(rev, Range{0, 8}, nil)
+	if s.CheckID() == firstCheck {
+		t.Error("IDs are renumbered, so CheckID must change")
+	}
+	if _, ok := s.Selected(); ok {
+		t.Error("a new result clears the selection")
+	}
+	var removed []int
+	for _, c := range rec.changes {
+		if c.Kind == IssuesChanged {
+			removed = c.RemovedIDs
+		}
+	}
+	if !slices.Equal(removed, []int{1, 2, 3}) {
+		t.Errorf("removed IDs = %v, want the three old ones", removed)
+	}
+}
+
+func TestFinishRangeCheckRebasesAcrossEditsMadeDuringTheCheck(t *testing.T) {
+	s := checked(t, threeItems())
+	rev := s.BeginCheck()
+	s.ApplyEdit(Edit{Pos: 7, Removed: 0, Added: 2}) // before the range: everything after moves by 2
+	// The range [8,17) is now [10,19); the result was made for the old text.
+	out := s.FinishRangeCheck(rev, Range{8, 17}, []Item{item("article", 11, 13)})
+	if out.Discarded || out.Dropped != 0 {
+		t.Fatalf("outcome = %+v", out)
+	}
+	want := []Range{{0, 5}, {13, 15}, {22, 27}}
+	if got := ranges(s.Items()); !slices.Equal(got, want) {
+		t.Errorf("ranges = %v, want %v", got, want)
+	}
+}
+
+func TestFinishRangeCheckIsDiscardedWhenAnEditTouchesTheRange(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		edit Edit
+	}{
+		{"inside", Edit{Pos: 12, Removed: 1, Added: 1}},
+		{"right after it", Edit{Pos: 17, Removed: 0, Added: 1}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s := checked(t, threeItems())
+			rev := s.BeginCheck()
+			s.ApplyEdit(tt.edit)
+			before := ranges(s.Items())
+			out := s.FinishRangeCheck(rev, Range{8, 17}, []Item{item("article", 11, 13)})
+			if !out.Discarded {
+				t.Fatalf("outcome = %+v, want Discarded", out)
+			}
+			if got := ranges(s.Items()); !slices.Equal(got, before) {
+				t.Errorf("the old issues must stay: %v -> %v", before, got)
+			}
+			if s.Phase() != Checked {
+				t.Errorf("phase = %v, want the phase from before the check", s.Phase())
+			}
+		})
+	}
+}
+
+func TestFinishRangeCheckIgnoresStaleResults(t *testing.T) {
+	s := checked(t, threeItems())
+	old := s.BeginCheck()
+	s.ApplyEdit(Edit{Pos: 50, Added: 1})
+	s.BeginCheck()
+	if out := s.FinishRangeCheck(old, Range{0, 5}, nil); !out.Stale {
+		t.Errorf("outcome = %+v, want Stale", out)
+	}
+	if got := ranges(s.Items()); !slices.Equal(got, []Range{{0, 5}, {10, 15}, {20, 25}}) {
+		t.Errorf("a stale result must change nothing, got %v", got)
+	}
+}

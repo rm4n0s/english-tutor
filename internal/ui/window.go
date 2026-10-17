@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -47,6 +48,9 @@ type Handlers struct {
 	// Alternative is the Alternative entry of the editor's right-click menu: the
 	// selection, as UTF-16 positions, wants other ways to write it.
 	Alternative func(start, end int)
+	// CheckSelection is the Check entry of the editor's right-click menu: only
+	// the selection, as UTF-16 positions, is checked.
+	CheckSelection func(start, end int)
 
 	// ModifiedChanged reports when the text becomes modified or is marked saved.
 	ModifiedChanged func(modified bool)
@@ -107,6 +111,8 @@ type MainWindow struct {
 	legend map[analysis.Category]*qt.QToolButton
 
 	editor       *qt.QPlainTextEdit
+	busy         *qt.QWidget // covers the editor while a check runs
+	busyLabel    *qt.QLabel
 	hSplit       *qt.QSplitter
 	vSplit       *qt.QSplitter
 	issuesHeader *qt.QLabel
@@ -222,6 +228,7 @@ func (w *MainWindow) buildCentral() {
 	w.editor.SetPlaceholderText("Write or paste your English text here...")
 	w.editor.SetLineWrapMode(qt.QPlainTextEdit__WidgetWidth)
 	leftLayout.AddWidget(w.editor.QWidget)
+	w.buildBusyCover()
 
 	// Right: issues list above the explanation panel.
 	issues := qt.NewQWidget2()
@@ -279,6 +286,41 @@ func (w *MainWindow) buildCentral() {
 	centralLayout.AddWidget(w.banner)
 	centralLayout.AddWidget2(w.hSplit.QWidget, 1)
 	w.win.SetCentralWidget(central)
+}
+
+// busyText is the text of the cover while a check runs.
+const busyText = "Checking..."
+
+// buildBusyCover builds the loading screen of the editor: a translucent layer
+// over its viewport with a label and a busy indicator. The viewport's layout
+// keeps the layer the size of the viewport.
+func (w *MainWindow) buildBusyCover() {
+	layout := qt.NewQVBoxLayout2()
+	layout.SetContentsMargins(0, 0, 0, 0)
+	w.editor.Viewport().SetLayout(layout.QLayout)
+
+	w.busy = qt.NewQWidget2()
+	w.busy.SetAttribute(qt.WA_StyledBackground)
+	w.busy.SetAttribute(qt.WA_NoMousePropagation) // a click on the cover must not reach the text
+	// ".QWidget" is a plain QWidget only, so the label and the bar keep their look.
+	w.busy.SetStyleSheet(".QWidget { background: rgba(127, 127, 127, 110); }")
+	coverLayout := qt.NewQVBoxLayout2()
+	w.busy.SetLayout(coverLayout.QLayout)
+	coverLayout.AddStretch()
+	w.busyLabel = qt.NewQLabel3(busyText)
+	w.busyLabel.SetAlignment(qt.AlignCenter)
+	w.busyLabel.SetStyleSheet("font-weight: bold;")
+	coverLayout.AddWidget(w.busyLabel.QWidget)
+	bar := qt.NewQProgressBar2()
+	bar.SetRange(0, 0) // busy indicator
+	bar.SetTextVisible(false)
+	bar.SetMaximumHeight(8)
+	bar.SetMaximumWidth(240)
+	coverLayout.AddWidget3(bar.QWidget, 0, qt.AlignHCenter)
+	coverLayout.AddStretch()
+
+	layout.AddWidget(w.busy)
+	w.busy.Hide()
 }
 
 func (w *MainWindow) buildStatusBar() {
@@ -350,6 +392,9 @@ func (w *MainWindow) connect() {
 	})
 	w.editor.SetContextMenuPolicy(qt.CustomContextMenu)
 	w.editor.OnCustomContextMenuRequested(func(pos *qt.QPoint) {
+		if w.EditorBusy() {
+			return // the loading screen is up
+		}
 		menu := w.buildEditorMenu(pos)
 		defer menu.Delete()
 		menu.ExecWithPos(w.editor.Viewport().MapToGlobalWithQPoint(pos))
@@ -489,6 +534,20 @@ func (w *MainWindow) SetChecking(checking bool) {
 	w.checkBtn.SetText("Check")
 	w.checkBtn.SetEnabled(len(w.llms) > 0)
 }
+
+// SetEditorBusy puts the loading screen over the editor, or takes it away. While
+// it is up the text cannot be edited, because the result of the check in
+// progress is for the text as it is.
+func (w *MainWindow) SetEditorBusy(busy bool) {
+	w.editor.SetReadOnly(busy)
+	if busy {
+		w.busy.Raise()
+	}
+	w.busy.SetVisible(busy)
+}
+
+// EditorBusy reports whether the loading screen is over the editor.
+func (w *MainWindow) EditorBusy() bool { return !w.busy.IsHidden() }
 
 // SetFontSize sets the editor font size in points.
 func (w *MainWindow) SetFontSize(points int) {
@@ -632,9 +691,12 @@ func underlineStyle(s UnderlineStyle) qt.QTextCharFormat__UnderlineStyle {
 	}
 }
 
-// alternativeLabel is the entry the editor's right-click menu gets when text is
-// selected (section 4.2).
-const alternativeLabel = "Alternative"
+// The entries the editor's right-click menu gets when text is selected
+// (section 4.2).
+const (
+	alternativeLabel = "Alternative"
+	checkLabel       = "Check"
+)
 
 // selectedRange returns the selection of the editor in UTF-16 units. ok is false
 // when nothing is selected or the selection holds only white space, so there is
@@ -648,8 +710,9 @@ func (w *MainWindow) selectedRange() (start, end int, ok bool) {
 }
 
 // buildEditorMenu is the right-click menu of the editor: Qt's standard menu,
-// plus Alternative when text is selected. The selection is read when the entry
-// is chosen, so it is the one the user saw.
+// plus Alternative and Check when text is selected. The selection is read when
+// the entry is chosen, so it is the one the user saw. Check is disabled while no
+// LLM is configured, like the Check button.
 func (w *MainWindow) buildEditorMenu(pos *qt.QPoint) *qt.QMenu {
 	menu := w.editor.CreateStandardContextMenuWithPosition(pos)
 	if _, _, ok := w.selectedRange(); !ok {
@@ -661,6 +724,14 @@ func (w *MainWindow) buildEditorMenu(pos *qt.QPoint) *qt.QMenu {
 	alt.OnTriggered(func() {
 		if start, end, ok := w.selectedRange(); ok && w.handlers.Alternative != nil {
 			w.handlers.Alternative(start, end)
+		}
+	})
+	check := menu.AddActionWithText(checkLabel)
+	check.SetToolTip("Check only the selected text for errors")
+	check.SetEnabled(len(w.llms) > 0)
+	check.OnTriggered(func() {
+		if start, end, ok := w.selectedRange(); ok && w.handlers.CheckSelection != nil {
+			w.handlers.CheckSelection(start, end)
 		}
 	})
 	return menu
@@ -728,6 +799,32 @@ func (w *MainWindow) TriggerEditorMenu(label string) bool {
 		}
 	}
 	return false
+}
+
+// EditorMenuEnabled reports whether the editor's right-click menu has an entry
+// with the label and it can be chosen.
+func (w *MainWindow) EditorMenuEnabled(label string) bool {
+	menu := w.buildEditorMenu(qt.NewQPoint())
+	defer menu.Delete()
+	for _, a := range menu.Actions() {
+		if a.Text() == label {
+			return a.IsEnabled()
+		}
+	}
+	return false
+}
+
+// TypeIntoEditor presses the keys of text (ASCII letters) in the editor at its
+// end, as the user typing would; a read-only editor ignores them.
+func (w *MainWindow) TypeIntoEditor(text string) {
+	c := w.editor.TextCursor()
+	c.MovePosition(qt.QTextCursor__End)
+	w.editor.SetTextCursor(c)
+	for _, r := range text {
+		ev := qt.NewQKeyEvent3(qt.QEvent__KeyPress, int(unicode.ToUpper(r)), qt.NoModifier, string(r))
+		qt.QCoreApplication_SendEvent(w.editor.QObject, ev.QEvent)
+		ev.Delete()
+	}
 }
 
 // ReplaceRange replaces the text between the UTF-16 positions start and end

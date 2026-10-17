@@ -225,6 +225,21 @@ type Outcome struct {
 // text as it was at rev; edits made since are applied to them first, and items
 // the edits touched are dropped. Item IDs are assigned here.
 func (s *State) FinishCheck(rev uint64, result []Item) Outcome {
+	return s.finish(rev, nil, result)
+}
+
+// FinishRangeCheck is FinishCheck for a check of only part of the text, the
+// range checked (in the text as it was at rev). The issues that overlap the
+// range are replaced by the result, whose items must lie inside it; every other
+// issue stays. If an edit made during the check touched the range, the result
+// is discarded, because the text it describes is gone.
+func (s *State) FinishRangeCheck(rev uint64, checked Range, result []Item) Outcome {
+	return s.finish(rev, &checked, result)
+}
+
+// finish is FinishCheck and FinishRangeCheck; checked is nil for a check of the
+// whole text.
+func (s *State) finish(rev uint64, checked *Range, result []Item) Outcome {
 	if !s.pending || rev != s.pendingRev {
 		return Outcome{Stale: true}
 	}
@@ -234,6 +249,21 @@ func (s *State) FinishCheck(rev uint64, result []Item) Outcome {
 	if overflown {
 		s.setPhase(s.beforeCheck)
 		return Outcome{Discarded: true}
+	}
+
+	var replaced Range
+	if checked != nil {
+		r, ok := *checked, true
+		for _, e := range log {
+			if r, ok = r.Rebase(e); !ok {
+				break
+			}
+		}
+		if !ok {
+			s.setPhase(s.beforeCheck)
+			return Outcome{Discarded: true}
+		}
+		replaced = r
 	}
 
 	items := slices.Clone(result)
@@ -255,10 +285,21 @@ func (s *State) FinishCheck(rev uint64, result []Item) Outcome {
 		kept = append(kept, it)
 	}
 
+	shown := len(kept)
 	oldSelected := s.selected
 	removed := make([]int, 0, len(s.items))
 	for _, it := range s.items {
 		removed = append(removed, it.ID)
+	}
+	if checked != nil {
+		// The issues outside the range stay (the edits of the log have already
+		// moved them). The new ones lie inside it, so none overlaps a kept one.
+		for _, it := range s.items {
+			if it.Start >= replaced.End || it.End <= replaced.Start {
+				kept = append(kept, it)
+			}
+		}
+		slices.SortStableFunc(kept, func(a, b Item) int { return a.Start - b.Start })
 	}
 	s.items = kept
 	for i := range s.items {
@@ -272,7 +313,7 @@ func (s *State) FinishCheck(rev uint64, result []Item) Outcome {
 	if oldSelected != 0 {
 		s.notify(Change{Kind: SelectionChanged})
 	}
-	return Outcome{Shown: len(kept), Dropped: dropped}
+	return Outcome{Shown: shown, Dropped: dropped}
 }
 
 // ApplyEdit records an edit of the text: it moves the issues after it, removes
