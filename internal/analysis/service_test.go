@@ -191,18 +191,18 @@ func TestCheckFailures(t *testing.T) {
 	}{
 		{
 			name:  "request failure",
-			reply: llmtest.Reply{Err: boom}, route: "Analyzer.Check->classifyError.LLMCallFailed",
+			reply: llmtest.Reply{Err: boom}, route: "Analyzer.checkChunk->classifyError.LLMCallFailed",
 			wantInMsg: "local",
 		},
 		{
 			name:    "timeout",
 			reply:   llmtest.Reply{Text: issuesJSON(), Delay: 5 * time.Second},
 			timeout: 30 * time.Millisecond,
-			route:   "Analyzer.Check->classifyError.LLMCallTimeout", wantInMsg: "took longer",
+			route:   "Analyzer.checkChunk->classifyError.LLMCallTimeout", wantInMsg: "took longer",
 		},
 		{
 			name:  "invalid reply twice",
-			reply: llmtest.Reply{Text: "no json here", Info: usageInfo(5, 5)}, route: "Analyzer.Check->CheckText->ParseResponse.LLMResponseInvalid",
+			reply: llmtest.Reply{Text: "no json here", Info: usageInfo(5, 5)}, route: "Analyzer.checkChunk->CheckText->ParseResponse.LLMResponseInvalid",
 			wantUsage: 1, // both requests of the chunk, summed
 		},
 	}

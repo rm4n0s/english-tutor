@@ -32,6 +32,7 @@ func migrations() []migration {
 		{id: "001_init", up: migration001Init},
 		{id: "002_error_events", up: migration002ErrorEvents},
 		{id: "003_llm_usage", up: migration003LLMUsage},
+		{id: "004_llm_request_settings", up: migration004LLMRequestSettings},
 	}
 }
 
@@ -133,4 +134,31 @@ func (llmUsageV3) TableName() string { return "llm_usage" }
 
 func migration003LLMUsage(tx *gorm.DB) error {
 	return tx.Migrator().CreateTable(&llmUsageV3{})
+}
+
+// llmConfigV4 is llmConfigV1 with the request settings. Both columns default to
+// 0, which means "use the default".
+type llmConfigV4 struct {
+	ID             uint   `gorm:"primaryKey"`
+	Name           string `gorm:"not null;uniqueIndex"`
+	Provider       string `gorm:"not null"`
+	Model          string `gorm:"not null"`
+	BaseURL        string
+	APIKey         string
+	Temperature    float64
+	TimeoutSeconds int `gorm:"not null;default:0"`
+	MaxParallel    int `gorm:"not null;default:0"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (llmConfigV4) TableName() string { return "llm_configs" }
+
+func migration004LLMRequestSettings(tx *gorm.DB) error {
+	for _, col := range []string{"TimeoutSeconds", "MaxParallel"} {
+		if err := tx.Migrator().AddColumn(&llmConfigV4{}, col); err != nil {
+			return err
+		}
+	}
+	return nil
 }

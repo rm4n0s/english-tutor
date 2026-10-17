@@ -20,6 +20,19 @@ type Model struct {
 	Name        string
 	LLM         llms.Model
 	Temperature float64
+	// Timeout overrides the default timeout of a request; 0 keeps the default.
+	Timeout time.Duration
+	// MaxParallel is how many requests of one check may run at once; 0 and 1
+	// mean one at a time.
+	MaxParallel int
+}
+
+// timeoutOr returns the model's timeout, or def when the model has none.
+func (m Model) timeoutOr(def time.Duration) time.Duration {
+	if m.Timeout > 0 {
+		return m.Timeout
+	}
+	return def
 }
 
 // Chat binds the model's call to the Chat function used by CheckText.

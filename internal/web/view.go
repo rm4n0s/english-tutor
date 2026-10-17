@@ -338,6 +338,8 @@ type llmFormData struct {
 	KeyDisabled bool
 	Providers   []selectOption
 	APIKeyNote  string
+	// Limits of the Timeout and Parallel requests fields.
+	MinTimeout, MaxTimeout, MaxParallel int
 }
 
 const apiKeyNote = "The key is stored in plain text in ~/.english-tutor/english-tutor.db. Only the file permissions (0600) protect it. It is never sent to this page."
@@ -357,7 +359,8 @@ func providerHints(p string) (placeholder, note string) {
 func (w *workspace) prefsData(pv *prefsView) *prefsData {
 	d := &prefsData{prefsView: pv, IsGeneral: pv.Tab == "general"}
 	if f := pv.Edit; f != nil {
-		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote}
+		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote,
+			MinTimeout: store.MinTimeoutSeconds, MaxTimeout: store.MaxTimeoutSeconds, MaxParallel: store.MaxParallelLimit}
 		if f.ID == 0 {
 			fd.Title = "Add LLM"
 		}

@@ -110,7 +110,8 @@ func (a *App) currentModel() (analysis.Model, error) {
 	if err != nil {
 		return analysis.Model{}, err
 	}
-	return analysis.Model{Name: cfg.Name, LLM: model, Temperature: cfg.Temperature}, nil
+	return analysis.Model{Name: cfg.Name, LLM: model, Temperature: cfg.Temperature,
+		Timeout: cfg.Timeout(), MaxParallel: cfg.MaxParallel}, nil
 }
 
 // finishCheck runs on the UI thread when a check has ended.

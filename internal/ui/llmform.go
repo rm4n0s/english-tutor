@@ -25,6 +25,7 @@ type LLMForm struct {
 	showKey                      *qt.QPushButton
 	provider                     *qt.QComboBox
 	temperature                  *qt.QDoubleSpinBox
+	timeout, parallel            *qt.QSpinBox
 	providerNote                 *qt.QLabel
 	privacyNote                  *qt.QLabel
 	message                      *qt.QLabel
@@ -103,6 +104,18 @@ func NewLLMForm(ctx context.Context, parent *qt.QWidget, backend PreferencesBack
 	f.temperature.SetDecimals(2)
 	form.AddRow3("Temperature", f.temperature.QWidget)
 
+	f.timeout = qt.NewQSpinBox2()
+	f.timeout.SetRange(0, store.MaxTimeoutSeconds)
+	f.timeout.SetSuffix(" s")
+	f.timeout.SetSpecialValueText("Default")
+	f.timeout.SetToolTip("How long one request may take before it is given up. Default: 300 s for a check, 120 s for an explanation or alternatives. Use a longer time for slow models.")
+	form.AddRow3("Timeout", f.timeout.QWidget)
+
+	f.parallel = qt.NewQSpinBox2()
+	f.parallel.SetRange(1, store.MaxParallelLimit)
+	f.parallel.SetToolTip("How many parts of a long text are checked at the same time. 1 sends them one after another. A higher number is faster but may hit the rate limit of the provider.")
+	form.AddRow3("Parallel requests", f.parallel.QWidget)
+
 	f.message = qt.NewQLabel3("")
 	f.message.SetWordWrap(true)
 	f.message.SetStyleSheet("color: " + colorError + ";")
@@ -147,6 +160,8 @@ func (f *LLMForm) fill(cfg store.LLMConfig) {
 	f.baseURL.SetText(cfg.BaseURL)
 	f.apiKey.SetText(cfg.APIKey)
 	f.temperature.SetValue(cfg.Temperature)
+	f.timeout.SetValue(cfg.TimeoutSeconds)
+	f.parallel.SetValue(max(cfg.MaxParallel, 1))
 	f.providerChanged()
 }
 
@@ -213,6 +228,8 @@ func (f *LLMForm) Config() store.LLMConfig {
 		cfg.APIKey = ""
 	}
 	cfg.Temperature = f.temperature.Value()
+	cfg.TimeoutSeconds = f.timeout.Value()
+	cfg.MaxParallel = f.parallel.Value()
 	return cfg
 }
 

@@ -66,6 +66,10 @@
   {{if and .HasKey (not .KeyDisabled)}}<label class="check"><input type="checkbox" name="clear_key" value="1"{{if .ClearKey}} checked{{end}}> Remove the stored key</label>{{end}}
   <p class="note">{{.APIKeyNote}}</p>
   <label>Temperature<input type="number" name="temperature" min="0" max="2" step="0.05" value="{{.Temperature}}"></label>
+  <label>Timeout (seconds)<input type="number" name="timeout" min="{{.MinTimeout}}" max="{{.MaxTimeout}}" step="1" value="{{.Timeout}}" placeholder="Default"></label>
+  <p class="note">How long one request may take before it is given up. Empty uses the default: 300 s for a check, 120 s for an explanation or alternatives. Use a longer time for slow models.</p>
+  <label>Parallel requests<input type="number" name="max_parallel" min="1" max="{{.MaxParallel}}" step="1" value="{{.Parallel}}"></label>
+  <p class="note">How many parts of a long text are checked at the same time. 1 sends them one after another. A higher number is faster but may hit the rate limit of the provider.</p>
   {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
   <p id="llmtest" class="{{if .TestOK}}ok{{else}}error{{end}}" role="status">{{.TestText}}</p>
   <div class="buttons">

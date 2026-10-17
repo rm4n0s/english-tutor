@@ -302,3 +302,64 @@ func TestDialogsSurviveAReconnect(t *testing.T) {
 		t.Error("a browser that comes back keeps its own text: the stream must not send it again")
 	}
 }
+
+func TestLLMRequestSettingsForm(t *testing.T) {
+	e := newEnv(t, llmtest.New(), Options{})
+	b := e.browser()
+	id, _ := b.open()
+	s := b.stream(id)
+	b.post(id, "prefs/open", "")
+
+	// A new form starts with the default timeout and one request at a time.
+	b.post(id, "prefs/llm/edit?id=0", "")
+	form := s.waitRegion(t, "modal", "Add LLM", `name="timeout"`, `name="max_parallel"`)
+	if !strings.Contains(form, `name="max_parallel" min="1" max="16" step="1" value="1"`) {
+		t.Errorf("parallel requests start at 1: %q", form)
+	}
+
+	// Bad values stay in the form with a message and are not stored.
+	tests := []struct {
+		name, timeout, parallel, want string
+	}{
+		{"timeout too short", "5", "1", "Timeout must be empty or between 10 and 3600 seconds."},
+		{"timeout not a number", "abc", "1", "Timeout must be a number of seconds"},
+		{"too many parallel", "", "17", "Parallel requests must be between 1 and 16."},
+		{"parallel not a number", "", "x", "Parallel requests must be a whole number."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := formValues("fast", "ollama", "m", "http://localhost:11434", "")
+			v.Set("timeout", tt.timeout)
+			v.Set("max_parallel", tt.parallel)
+			b.postForm(id, "prefs/llm/save", v)
+			s.waitRegion(t, "modal", tt.want, "Add LLM")
+		})
+	}
+
+	// Good values are stored and shown again when the LLM is edited.
+	v := formValues("fast", "ollama", "m", "http://localhost:11434", "")
+	v.Set("timeout", "240")
+	v.Set("max_parallel", "4")
+	b.postForm(id, "prefs/llm/save", v)
+	s.waitRegion(t, "modal", ">fast<")
+	cfgs, _ := e.st.ListLLMConfigs(t.Context())
+	var fast store.LLMConfig
+	for _, c := range cfgs {
+		if c.Name == "fast" {
+			fast = c
+		}
+	}
+	if fast.TimeoutSeconds != 240 || fast.MaxParallel != 4 {
+		t.Fatalf("stored = %+v, want timeout 240 and parallel 4", fast)
+	}
+	b.post(id, "prefs/llm/edit?id="+uitoa(fast.ID), "")
+	s.waitRegion(t, "modal", "Edit LLM", `name="timeout" min="10" max="3600" step="1" value="240"`, `max="16" step="1" value="4"`)
+
+	// An empty timeout goes back to the default.
+	v.Set("timeout", "")
+	b.postForm(id, "prefs/llm/save", v)
+	s.waitRegion(t, "modal", ">fast<")
+	if got, _ := e.st.GetLLMConfig(t.Context(), fast.ID); got.TimeoutSeconds != 0 {
+		t.Errorf("an empty timeout is the default, got %d", got.TimeoutSeconds)
+	}
+}

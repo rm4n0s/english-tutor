@@ -217,8 +217,9 @@ func (s *Suggester) Suggest(ctx context.Context, m Model, req AlternativesReques
 		cancelled bool
 		cerr      error
 	)
+	timeout := m.timeoutOr(s.timeout)
 	for attempt := 0; attempt < 2; attempt++ {
-		reqCtx, cancel := context.WithTimeout(runCtx, s.timeout)
+		reqCtx, cancel := context.WithTimeout(runCtx, timeout)
 		resp, err := llm.Generate(reqCtx, m.LLM, llm.Request{
 			System:      prompt.System,
 			Prompt:      prompt.User,
@@ -226,7 +227,7 @@ func (s *Suggester) Suggest(ctx context.Context, m Model, req AlternativesReques
 		})
 		if err != nil {
 			// classifyError looks at reqCtx, so cancel it only afterwards.
-			cancelled, cerr = classifyError(runCtx, reqCtx, err, m.Name, s.timeout)
+			cancelled, cerr = classifyError(runCtx, reqCtx, err, m.Name, timeout)
 		}
 		cancel()
 		if err != nil {

@@ -155,6 +155,8 @@ A list of all the errors found by the last check sits at the top of the right co
   | Base URL | Required for `ollama` (default `http://localhost:11434`) and `openai-compatible`; optional for `anthropic`. Must be an `http://` or `https://` address (langchaingo's Ollama client would otherwise exit the program on an unparsable URL) |
   | API key | Required for `anthropic` and usually for `openai-compatible`; not used by `ollama`. Entered in a password field, with a Show / Hide button next to it (always masked when the form opens) |
   | Temperature | Optional, default 0.2 |
+  | Timeout | Optional, in seconds (10 to 3600). Empty or 0 uses the default of each request: 300 s for a check, 120 s for an explanation and for alternatives. A value replaces that default for all three kinds of request of this LLM |
+  | Parallel requests | 1 to 16, default 1. How many chunks of one check are sent at once (section 5.2); 1 sends them one after another |
 
 - **Test connection** sends a tiny prompt and reports success (with the time the LLM took) or the failure reason. It never blocks the UI thread: the request runs in a goroutine and its result is posted back, and it is dropped if the dialog was closed meanwhile. It is available for the selected row of the list and, using the values currently typed, in the Add / Edit form, where it does not need a name. The request is not counted in the token usage (section 5.8).
 - A new configuration starts with the provider `openai-compatible` and an empty Base URL (`llm.DefaultProvider`); the user picks another provider in the form.
@@ -263,7 +265,7 @@ LLMs are unreliable at counting character offsets, so the model is never asked f
 
 Parsing is tolerant about packaging and strict about content: markdown fences and prose around the JSON are ignored, and a reply that is just a JSON array of issues is accepted, but the JSON must contain an `issues` list (an object without it, `null` or text is invalid). Entries without `text` are dropped and counted. `message` is cut at 300 characters, the contexts at 200, and a snippet over 2000 characters is dropped, so a model that ignores the contract cannot flood the UI. An empty `message` falls back to the label of the error type. The reply is never put in error metadata or logs.
 
-The prompt and the response structs live in `internal/analysis`. For long texts the app splits the input into chunks (at most 2000 words per request) with `analysis.SplitChunks`: a chunk ends at a paragraph boundary (blank line) where possible; a paragraph over the limit is cut between sentences, and a sentence over the limit between words. The chunks are contiguous and cover the whole text, whitespace stays with the text before it, and a text with no words gives no chunks. The app runs the chunks sequentially, locates each chunk's issues in the chunk's own text, and merges the results with offsets shifted by the chunk start (`LocateResult.Append`).
+The prompt and the response structs live in `internal/analysis`. For long texts the app splits the input into chunks (at most 2000 words per request) with `analysis.SplitChunks`: a chunk ends at a paragraph boundary (blank line) where possible; a paragraph over the limit is cut between sentences, and a sentence over the limit between words. The chunks are contiguous and cover the whole text, whitespace stays with the text before it, and a text with no words gives no chunks. The app locates each chunk's issues in the chunk's own text, and merges the results in text order with offsets shifted by the chunk start (`LocateResult.Append`), whatever order the requests finished in. At most as many chunks as the LLM's *Parallel requests* setting are in flight at once; with the default of 1 they are sent one after another. With more than one, the text is spread over the parallel requests instead of being cut at 2000 words: chunks are at most `ceil(words / parallel)` words, but never under 200 words and never over 2000, so an essay of 800 words with 4 parallel requests becomes 4 chunks. The first chunk that fails cancels the requests still running and its error is the one reported; cancelling the check cancels all of them.
 
 ### 5.3 Locating issues
 
@@ -363,14 +365,14 @@ When the user chooses **Alternative** on a selection (section 4.2), a request as
 - **Prompt.** A coach, not a checker: the system prompt asks for between 3 and 5 alternatives, each a replacement for the whole selected text that fits in its place (the same meaning, tone and grammatical form: a word for a word or a short phrase, a sentence or paragraph for a full rewrite), different from each other and from the selection, and correct English even when the selection has a mistake. The selection and its context are the user's text and are delimited like in the check prompt, with a random per-request token (section 5.9). The context is the whole text if it has at most 600 words, otherwise the paragraph around the selection (as in section 5.4).
 - **Reply.** One JSON object, `{"alternatives": ["...", "..."]}`, parsed as tolerantly as the check reply (fences and prose around it are ignored, a bare array of strings is accepted). Entries are trimmed; empty ones, repeats and the selected text itself (ignoring case) are dropped; at most eight are kept and an entry over 6000 characters is dropped. A reply that is not valid, or has no usable alternative, is retried once with a "return valid JSON only" reminder, and then fails with `LLMResponseInvalid`. The reply is never put in error metadata or logs.
 - **Limits.** A selection that is empty or only white space is `SelectionEmpty`, and one over 600 words is `SelectionTooLong` ("select at most 600"); neither reaches the model.
-- **One at a time.** `analysis.Suggester` runs one request at a time: a new request, closing the window or quitting cancels the one before it. Cancelling is not an error. The timeout is 120 s, like an explanation, and gives `LLMCallTimeout`; any other failure is `LLMCallFailed`. Both are shown in the window, not in the banner, and logged.
+- **One at a time.** `analysis.Suggester` runs one request at a time: a new request, closing the window or quitting cancels the one before it. Cancelling is not an error. The timeout is 120 s, like an explanation (or the LLM's *Timeout* setting), and gives `LLMCallTimeout`; any other failure is `LLMCallFailed`. Both are shown in the window, not in the banner, and logged.
 - **Tokens.** The request, with its retry as one record, is counted in the status bar and saved with kind `alternatives` (section 5.8). Nothing is recorded in the mistake statistics.
 
 ## 6. Concurrency
 
 - All Qt calls happen on the UI thread. Background work (LLM calls, database access) runs in goroutines and posts results back using miqt's main-thread dispatch helper.
 - Every goroutine that does I/O receives a `context.Context`. Quitting the application (closing the window when there is no tray, or the tray's Close item) cancels the root context and waits for goroutines to end; hiding the window to the tray does not.
-- The check and explanation requests have timeouts (default 60 s and 120 s). The check timeout applies to each chunk's request, not to the whole check. A timeout produces `LLMCallTimeout`, and any other failure `LLMCallFailed`; both show their message in the error banner. Cancelling (by the user, by a newer request or by quitting the application) is detected first and is not an error. Token usage is recorded for every request that reports it, including requests of a check that later fails or is cancelled.
+- The check and explanation requests have timeouts (default 300 s and 120 s), which the *Timeout* setting of the selected LLM replaces (section 4.5). The check timeout applies to each chunk's request, not to the whole check, so chunks sent in parallel each get the full time. A timeout produces `LLMCallTimeout`, and any other failure `LLMCallFailed`; both show their message in the error banner. Cancelling (by the user, by a newer request or by quitting the application) is detected first and is not an error. Token usage is recorded for every request that reports it, including requests of a check that later fails or is cancelled.
 
 ## 7. Saving text
 
@@ -402,13 +404,13 @@ Tables (created by numbered migrations, `001_init` first):
 
 | Table | Columns |
 |---|---|
-| `llm_configs` | `id`, `name` (unique), `provider`, `model`, `base_url`, `api_key`, `temperature`, `created_at`, `updated_at` |
+| `llm_configs` | `id`, `name` (unique), `provider`, `model`, `base_url`, `api_key`, `temperature`, `timeout_seconds`, `max_parallel`, `created_at`, `updated_at` |
 | `documents` | `id`, `title`, `content`, `created_at`, `updated_at` |
 | `error_events` | `id`, `error_type` (taxonomy id, text), `category`, `snippet`, `source_key`, `fingerprint`, `llm_name`, `created_at`; unique index on (`source_key`, `fingerprint`); index on (`error_type`, `created_at`) |
 | `llm_usage` | `id`, `llm_name`, `kind` (`check`, `explain` or `alternatives`), `input_tokens`, `output_tokens`, `estimated`, `created_at` |
 | `settings` | `key` (primary key), `value` |
 
-`error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`.
+`error_events` is created by migration `002_error_events` and `llm_usage` by `003_llm_usage`. Migration `004_llm_request_settings` adds `timeout_seconds` and `max_parallel` to `llm_configs` (both 0, meaning the defaults, for LLMs saved before).
 
 Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size`, `splitter_sizes`, `window_geometry`, `web_port`, `web_password`. `splitter_sizes` holds four numbers as JSON: the horizontal splitter (editor, right column) then the vertical one (issues list, explanation panel). `window_geometry` is Qt's `saveGeometry()` bytes, base64 encoded. A missing or unparsable value gives the default: `auto_check` false, `auto_check_delay_s` 3, `font_size` 13, no selected LLM, no saved splitter sizes or geometry, `web_port` 3333, no `web_password`. `web_password` holds the hash made by `web.HashPassword` (`pbkdf2-sha256$<rounds>$<salt>$<hash>`), never the password.
 
@@ -449,7 +451,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `DatabaseOpenFailed` | `store` | the SQLite file cannot be opened |
 | `MigrationFailed` | `store` | a numbered migration fails |
 | `LLMConfigNameTaken` | `store` | duplicate LLM name |
-| `LLMConfigInvalid` | `store`/`llm` | missing name or model, missing or malformed base URL, missing key for the provider, temperature outside 0 to 2 (validated once, in `llm.ModelConfig.Validate`) |
+| `LLMConfigInvalid` | `store`/`llm` | missing name or model, missing or malformed base URL, missing key for the provider, temperature outside 0 to 2 (validated once, in `llm.ModelConfig.Validate`), a timeout outside 10 to 3600 seconds or parallel requests outside 1 to 16 (in `store.LLMConfig.Validate`) |
 | `LLMConfigNotFound` | `store` | selected LLM id does not exist |
 | `DocumentNotFound` | `store` | library document id does not exist |
 | `DatabaseQueryFailed` | `store` | any other query on the configs, documents or settings tables fails |

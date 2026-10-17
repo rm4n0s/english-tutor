@@ -240,6 +240,8 @@ func TestAddLLM(t *testing.T) {
 			f.model.SetText("claude-sonnet-5-5")
 			f.apiKey.SetText("sk-secret")
 			f.temperature.SetValue(0.5)
+			f.timeout.SetValue(240)
+			f.parallel.SetValue(4)
 			f.saveBtn.Click()
 		}
 		d.addBtn.Click()
@@ -248,7 +250,7 @@ func TestAddLLM(t *testing.T) {
 		}
 		got := b.saved[0]
 		if got.ID == 0 || got.Name != "Claude" || got.Provider != "anthropic" || got.Model != "claude-sonnet-5-5" ||
-			got.APIKey != "sk-secret" || got.BaseURL != "" || got.Temperature != 0.5 {
+			got.APIKey != "sk-secret" || got.BaseURL != "" || got.Temperature != 0.5 || got.TimeoutSeconds != 240 || got.MaxParallel != 4 {
 			t.Errorf("saved config = %+v", got)
 		}
 		if h.changed != 1 || d.list.Count() != 2 {
@@ -275,7 +277,7 @@ func TestAddFormStartsWithOpenAICompatibleDefaults(t *testing.T) {
 			}
 		}
 		d.addBtn.Click()
-		if seen.Provider != "openai-compatible" || seen.BaseURL != "" || seen.Temperature != 0.2 {
+		if seen.Provider != "openai-compatible" || seen.BaseURL != "" || seen.Temperature != 0.2 || seen.TimeoutSeconds != 0 || seen.MaxParallel != 1 {
 			t.Errorf("new form = %+v", seen)
 		}
 	})

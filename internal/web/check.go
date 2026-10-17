@@ -26,7 +26,8 @@ func (w *workspace) model() (analysis.Model, error) {
 	if err != nil {
 		return analysis.Model{}, err
 	}
-	return analysis.Model{Name: cfg.Name, LLM: m, Temperature: cfg.Temperature}, nil
+	return analysis.Model{Name: cfg.Name, LLM: m, Temperature: cfg.Temperature,
+		Timeout: cfg.Timeout(), MaxParallel: cfg.MaxParallel}, nil
 }
 
 // startCheck sends the text to the selected LLM. A manual check (the Check

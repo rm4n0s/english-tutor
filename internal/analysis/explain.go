@@ -173,7 +173,8 @@ func (e *Explainer) Explain(ctx context.Context, m Model, req ExplainRequest, on
 	}
 	prompt := BuildExplainPrompt(explanationContext(req.Text, req.Start), snippet, req.Issue.Type, req.Issue.Message)
 
-	reqCtx, cancel := context.WithTimeout(runCtx, e.timeout)
+	timeout := m.timeoutOr(e.timeout)
+	reqCtx, cancel := context.WithTimeout(runCtx, timeout)
 	resp, err := llm.Generate(reqCtx, m.LLM, llm.Request{
 		System:      prompt.System,
 		Prompt:      prompt.User,
@@ -189,7 +190,7 @@ func (e *Explainer) Explain(ctx context.Context, m Model, req ExplainRequest, on
 		cerr      error
 	)
 	if err != nil {
-		cancelled, cerr = classifyError(runCtx, reqCtx, err, m.Name, e.timeout)
+		cancelled, cerr = classifyError(runCtx, reqCtx, err, m.Name, timeout)
 	}
 	cancel()
 
