@@ -43,8 +43,8 @@ func (d *choiceDialog) answer(i int) {
 		return
 	}
 	d.answered = true
+	d.Close() // first: what done opens must not be the route that closes
 	d.done(i)
-	d.Close()
 }
 
 func (d *choiceDialog) Dismissed() {
@@ -76,12 +76,13 @@ type textDialog struct {
 	focus        *widgets.FocusNode
 	done         func(text string, ok bool)
 	answered     bool
+	secret       bool // the text is a password: it is shown as dots
 }
 
 func (d *textDialog) Build(bc widgets.BuildContext, close func()) widgets.Widget {
 	return d.attach(close, func(bc widgets.BuildContext) widgets.Widget {
 		input := m.NewTextField(m.TextFieldOpts{
-			Controller: d.field, FocusNode: d.focus, Autofocus: true,
+			Controller: d.field, FocusNode: d.focus, Autofocus: true, ObscureText: d.secret,
 			Decoration:  ptr(m.NewInputDecoration(m.InputDecorationOpts{LabelText: foundation.Some(d.label)})),
 			OnSubmitted: func(string) { d.answer(true) },
 		})
@@ -95,8 +96,8 @@ func (d *textDialog) answer(ok bool) {
 		return
 	}
 	d.answered = true
-	d.done(d.field.Text(), ok)
 	d.Close()
+	d.done(d.field.Text(), ok)
 }
 
 func (d *textDialog) Dismissed() {
