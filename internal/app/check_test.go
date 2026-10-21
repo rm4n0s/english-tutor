@@ -10,27 +10,34 @@ import (
 	"time"
 
 	"github.com/rm4n0s/errors"
+	"github.com/rm4n0s/glutter/gluttertest"
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
-	"github.com/rm4n0s/english-tutor/internal/uitest"
 )
 
-// harness drives an App from the test goroutine, so the Qt event loop keeps
-// running between steps (a check finishes through that loop).
+// harness drives an App from the test goroutine, which glutter's test binding
+// takes as the UI thread. The results of background work are posted to it and
+// run when the test calls onUI or settle.
 type harness struct {
-	t    *testing.T
-	a    *App
-	st   *store.Store
-	logs *syncBuffer
-	llm  uint
+	t      *testing.T
+	tester *gluttertest.Tester
+	a      *App
+	st     *store.Store
+	logs   *syncBuffer
+	llm    uint
 }
 
-func onUI(f func()) { uitest.OnUI(f) }
+// onUI runs f on the UI thread and then the callbacks that background work has
+// posted so far.
+func (h *harness) onUI(f func()) {
+	f()
+	h.tester.FlushPosted()
+}
 
 func newHarness(t *testing.T, fake *llmtest.Fake) *harness {
 	t.Helper()
@@ -41,11 +48,10 @@ func newHarness(t *testing.T, fake *llmtest.Fake) *harness {
 func newHarnessLLM(t *testing.T, fake *llmtest.Fake, llmName string) *harness {
 	t.Helper()
 	st := newStore(t)
-	h := &harness{t: t, st: st, logs: &syncBuffer{}, llm: addLLM(t, st, llmName)}
-	onUI(func() {
-		h.a = New(context.Background(), slog.New(slog.NewTextHandler(h.logs, nil)), st)
-		h.a.newModel = func(store.LLMConfig) (llms.Model, error) { return fake, nil }
-	})
+	h := &harness{t: t, st: st, logs: &syncBuffer{}, llm: addLLM(t, st, llmName), tester: gluttertest.New(t)}
+	h.a = New(context.Background(), slog.New(slog.NewTextHandler(h.logs, nil)), st)
+	h.a.newModel = func(store.LLMConfig) (llms.Model, error) { return fake, nil }
+	h.tester.PumpWidget(h.a.Root())
 	t.Cleanup(func() {
 		// Let background work finish (its results are posted to the UI thread
 		// first, and run before the window goes), then delete the window.
@@ -53,7 +59,7 @@ func newHarnessLLM(t *testing.T, fake *llmtest.Fake, llmName string) *harness {
 		h.a.explainer.Cancel()
 		h.a.suggester.Cancel()
 		h.settle()
-		onUI(func() { h.a.win.Widget().Delete() })
+		h.a.win.Dispose()
 	})
 	return h
 }
@@ -64,7 +70,7 @@ func newHarnessLLM(t *testing.T, fake *llmtest.Fake, llmName string) *harness {
 func (h *harness) settle() {
 	for range 20 {
 		h.a.Wait()
-		onUI(func() {}) // runs the callbacks posted so far
+		h.tester.FlushPosted() // runs the callbacks posted so far
 		h.a.bgMu.Lock()
 		idle := h.a.bgN == 0
 		h.a.bgMu.Unlock()
@@ -74,14 +80,32 @@ func (h *harness) settle() {
 	}
 }
 
+// sleep lets d pass in both the real and the fake clock, so that goroutines
+// make progress and the timers of the application fire.
+func (h *harness) sleep(d time.Duration) {
+	h.t.Helper()
+	const step = 5 * time.Millisecond
+	for ; d > 0; d -= step {
+		h.tester.Pump(step)
+		h.tester.FlushPosted()
+		time.Sleep(step)
+	}
+}
+
+// pumpHistory lets the undo history of the editor close its current step.
+func (h *harness) pumpHistory() {
+	h.tester.Pump()
+	h.tester.Pump(time.Second)
+}
+
 func (h *harness) setText(text string) {
 	h.t.Helper()
-	onUI(func() { h.a.win.SetText(text) })
+	h.onUI(func() { h.a.win.SetText(text) })
 }
 
 func (h *harness) checkButton() {
 	h.t.Helper()
-	onUI(func() { h.a.win.CheckButtonClick() })
+	h.onUI(func() { h.a.win.CheckButtonClick() })
 }
 
 // waitFor polls cond on the UI thread until it holds.
@@ -90,10 +114,11 @@ func (h *harness) waitFor(what string, cond func() bool) {
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		ok := false
-		onUI(func() { ok = cond() })
+		h.onUI(func() { ok = cond() })
 		if ok {
 			return
 		}
+		h.tester.Pump(2 * time.Millisecond) // the fake clock runs the timers
 		time.Sleep(2 * time.Millisecond)
 	}
 	h.t.Fatalf("timed out waiting for %s", what)
@@ -104,20 +129,20 @@ func (h *harness) waitIdle() {
 	h.waitFor("the check to end", func() bool { return !h.a.checking })
 }
 
-func (h *harness) underlines() (us []ui.Underline) {
-	onUI(func() { us = h.a.win.Underlines() })
+func (h *harness) underlines() (us []gui.Underline) {
+	h.onUI(func() { us = h.a.win.Underlines() })
 	return us
 }
 
 func (h *harness) statusText() (s string) {
-	onUI(func() { s = h.a.win.StatusText() })
+	h.onUI(func() { s = h.a.win.StatusText() })
 	return s
 }
 
 func (h *harness) events() (n int) {
 	var rows []store.TypeStat
 	var err error
-	onUI(func() {})
+	h.onUI(func() {})
 	rows, err = h.a.stats.TypeStats(context.Background())
 	if err != nil {
 		h.t.Fatal(err)
@@ -148,7 +173,7 @@ func TestManualCheckUnderlinesAndRecords(t *testing.T) {
 	h := newHarness(t, llmtest.New(twoIssues()))
 	h.setText(sample)
 	h.checkButton()
-	onUI(func() {
+	h.onUI(func() {
 		if h.a.win.CheckButtonText() != "Cancel" || h.a.win.StatusText() != "Checking..." {
 			t.Errorf("while checking: button %q, status %q", h.a.win.CheckButtonText(), h.a.win.StatusText())
 		}
@@ -165,7 +190,7 @@ func TestManualCheckUnderlinesAndRecords(t *testing.T) {
 	if us[1].Start != 12 || us[1].End != 20 || us[1].Category != analysis.Vocabulary {
 		t.Errorf("second underline = %+v", us[1])
 	}
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.win.StatusText(); got != "2 issues" {
 			t.Errorf("status = %q", got)
 		}
@@ -182,12 +207,12 @@ func TestManualCheckUnderlinesAndRecords(t *testing.T) {
 func TestAutoCheckResultIsNotRecorded(t *testing.T) {
 	h := newHarness(t, llmtest.New(twoIssues()))
 	h.setText(sample)
-	onUI(func() { h.a.startCheck(false) })
+	h.onUI(func() { h.a.startCheck(false) })
 	h.waitIdle()
 	if len(h.underlines()) != 2 {
 		t.Fatalf("underlines = %+v", h.underlines())
 	}
-	time.Sleep(50 * time.Millisecond) // an unwanted recording would be asynchronous
+	h.sleep(50 * time.Millisecond) // an unwanted recording would be asynchronous
 	if n := h.events(); n != 0 {
 		t.Errorf("an auto-check recorded %d mistakes, want 0", n)
 	}
@@ -201,7 +226,7 @@ func TestCheckingTheSameTextTwiceCountsOnce(t *testing.T) {
 		h.waitIdle()
 	}
 	h.waitFor("recording", func() bool { return h.events() >= 2 })
-	time.Sleep(50 * time.Millisecond)
+	h.sleep(50 * time.Millisecond)
 	if n := h.events(); n != 2 {
 		t.Errorf("events = %d, want 2 after checking twice", n)
 	}
@@ -215,7 +240,7 @@ func TestMistakesAreRecordedUnderTheSessionSourceWithTheItemsFingerprint(t *test
 	h.waitFor("recording", func() bool { return h.events() == 2 })
 
 	var key, fingerprint string
-	onUI(func() {
+	h.onUI(func() {
 		key = h.a.sourceKey
 		fingerprint = h.a.state.Items()[0].Fingerprint
 	})
@@ -245,7 +270,7 @@ func TestCancelKeepsTheOldIssues(t *testing.T) {
 	h.checkButton() // now the Cancel button
 	h.waitIdle()
 
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.win.StatusText(); got != "Check cancelled" {
 			t.Errorf("status = %q", got)
 		}
@@ -260,7 +285,7 @@ func TestCancelKeepsTheOldIssues(t *testing.T) {
 		t.Errorf("cancelling must not log an error:\n%s", h.logs.String())
 	}
 	h.waitFor("recording", func() bool { return h.events() == 2 })
-	time.Sleep(30 * time.Millisecond)
+	h.sleep(30 * time.Millisecond)
 	if n := h.events(); n != 2 {
 		t.Errorf("events = %d: a cancelled check records nothing", n)
 	}
@@ -275,7 +300,7 @@ func TestFailedCheckShowsABannerAndKeepsTheIssues(t *testing.T) {
 	h.checkButton()
 	h.waitIdle()
 
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.win.StatusText(); got != "Check failed" {
 			t.Errorf("status = %q", got)
 		}
@@ -293,7 +318,7 @@ func TestFailedCheckShowsABannerAndKeepsTheIssues(t *testing.T) {
 	// The next successful check clears the banner.
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		if h.a.win.ErrorText() != "" {
 			t.Errorf("banner = %q, want it cleared by the next check", h.a.win.ErrorText())
 		}
@@ -302,7 +327,7 @@ func TestFailedCheckShowsABannerAndKeepsTheIssues(t *testing.T) {
 
 func TestUnusableModelConfigurationFailsWithAMessage(t *testing.T) {
 	h := newHarness(t, llmtest.New())
-	onUI(func() {
+	h.onUI(func() {
 		h.a.newModel = func(store.LLMConfig) (llms.Model, error) {
 			return nil, errors.New("LLMClientCreateFailed", "The client for local could not be created.")
 		}
@@ -320,13 +345,13 @@ func TestEditsDuringACheckAreAppliedToTheResult(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitFor("the request", func() bool { return len(fake.Calls()) == 1 })
-	onUI(func() { h.a.win.InsertTextAt(3, "XXXX") }) // inside "He go": the first issue is dropped
+	h.onUI(func() { h.a.win.InsertTextAt(3, "XXXX") }) // inside "He go": the first issue is dropped
 	h.waitIdle()
 	us := h.underlines()
 	if len(us) != 1 || us[0].Category != analysis.Vocabulary {
 		t.Fatalf("underlines = %+v, want only the second issue", us)
 	}
-	onUI(func() {
+	h.onUI(func() {
 		text := h.a.win.Text()
 		start := analysis.NewUTF16Map(text).ByteOffset(us[0].Start)
 		end := analysis.NewUTF16Map(text).ByteOffset(us[0].End)
@@ -339,7 +364,7 @@ func TestEditsDuringACheckAreAppliedToTheResult(t *testing.T) {
 func TestEmptyTextAndNoLLMMakeNoRequest(t *testing.T) {
 	fake := llmtest.New(twoIssues())
 	h := newHarness(t, fake)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.startCheck(true)
 		if got := h.a.win.StatusText(); !strings.Contains(got, "Nothing to check") {
 			t.Errorf("status = %q", got)
@@ -350,7 +375,7 @@ func TestEmptyTextAndNoLLMMakeNoRequest(t *testing.T) {
 		h.a.win.SetLLMs(nil, 0)
 		h.a.startCheck(true)
 	})
-	time.Sleep(30 * time.Millisecond)
+	h.sleep(30 * time.Millisecond)
 	if n := len(fake.Calls()); n != 0 || h.a.checking {
 		t.Errorf("calls = %d, checking = %v", n, h.a.checking)
 	}
@@ -363,11 +388,11 @@ func TestNewerCheckSupersedesTheOlderOne(t *testing.T) {
 	)
 	h := newHarness(t, fake)
 	h.setText(sample)
-	onUI(func() { h.a.startCheck(false) })
+	h.onUI(func() { h.a.startCheck(false) })
 	h.waitFor("the first request", func() bool { return len(fake.Calls()) == 1 })
-	onUI(func() { h.a.startCheck(false) })
+	h.onUI(func() { h.a.startCheck(false) })
 	h.waitIdle()
-	time.Sleep(50 * time.Millisecond) // the first check reports its cancellation meanwhile
+	h.sleep(50 * time.Millisecond) // the first check reports its cancellation meanwhile
 	us := h.underlines()
 	if len(us) != 1 || us[0].Category != analysis.Vocabulary {
 		t.Errorf("underlines = %+v, want only the newer check's issue", us)
@@ -387,7 +412,7 @@ func TestSessionTotalsAccumulate(t *testing.T) {
 		h.checkButton()
 		h.waitIdle()
 	}
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.win.TokensText(); got != "last: 50 in / 5 out · session: 150 in / 15 out" {
 			t.Errorf("tokens = %q", got)
 		}
@@ -402,7 +427,7 @@ func TestSelectionFromTheTextAndFromTheState(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		// A click inside the second issue selects it and leaves the cursor where it is.
 		h.a.win.MoveCursorTo(15)
 		sel, ok := h.a.state.Selected()
@@ -431,7 +456,7 @@ func TestNextAndPreviousIssue(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.MoveCursorTo(7) // between the issues
 		h.a.stepIssue(h.a.state.Next)
 		if sel, _ := h.a.state.Selected(); sel.Start != 12 || h.a.win.CursorPosition() != 12 {
@@ -453,7 +478,7 @@ func TestLegendHidesUnderlines(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.LegendButtonClick(analysis.Vocabulary)
 		us := h.a.win.Underlines()
 		if len(us) != 1 || us[0].Category != analysis.Grammar {
@@ -471,7 +496,7 @@ func TestTooltip(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		want := "Verb form · Grammar\nmsg for He go"
 		if got := h.a.tooltipAt(2); got != want {
 			t.Errorf("tooltip = %q, want %q", got, want)
@@ -491,7 +516,7 @@ func TestEditingRemovesTheIssueAndUpdatesTheStatus(t *testing.T) {
 	h.setText(sample)
 	h.checkButton()
 	h.waitIdle()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.InsertTextAt(2, "x") // inside "He go"
 		if us := h.a.win.Underlines(); len(us) != 1 {
 			t.Errorf("underlines = %+v", us)
@@ -531,21 +556,21 @@ func TestSessionKeys(t *testing.T) {
 func TestAutoCheckWaitsForAPause(t *testing.T) {
 	fake := llmtest.New(llmtest.Reply{Text: issuesReply(map[string]string{"He go": "verb_form"}), Info: info})
 	h := newHarness(t, fake)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.autoDelay = 80 * time.Millisecond
 		h.a.onAutoCheckChanged(true)
 	})
 	// Typing every 40 ms keeps pushing the check back.
 	for i := range 4 {
-		onUI(func() { h.a.win.SetText(sample + strings.Repeat("!", i+1)) })
-		time.Sleep(40 * time.Millisecond)
+		h.onUI(func() { h.a.win.SetText(sample + strings.Repeat("!", i+1)) })
+		h.sleep(40 * time.Millisecond)
 	}
 	if n := len(fake.Calls()); n != 0 {
 		t.Fatalf("a check ran while the user was still typing (%d calls)", n)
 	}
 	h.waitFor("the auto-check", func() bool { return len(fake.Calls()) == 1 })
 	h.waitIdle()
-	time.Sleep(150 * time.Millisecond)
+	h.sleep(150 * time.Millisecond)
 	if n := len(fake.Calls()); n != 1 {
 		t.Errorf("calls = %d, want exactly one auto-check", n)
 	}
@@ -560,11 +585,11 @@ func TestAutoCheckWaitsForAPause(t *testing.T) {
 func TestAutoCheckIsOffByDefault(t *testing.T) {
 	fake := llmtest.New(twoIssues())
 	h := newHarness(t, fake)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.autoDelay = 10 * time.Millisecond
 		h.a.win.SetText(sample)
 	})
-	time.Sleep(100 * time.Millisecond)
+	h.sleep(100 * time.Millisecond)
 	if n := len(fake.Calls()); n != 0 {
 		t.Errorf("calls = %d: with auto-check off only the Check button starts a check", n)
 	}
@@ -573,13 +598,13 @@ func TestAutoCheckIsOffByDefault(t *testing.T) {
 func TestTurningAutoCheckOffStopsAPendingOne(t *testing.T) {
 	fake := llmtest.New(twoIssues())
 	h := newHarness(t, fake)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.autoDelay = 60 * time.Millisecond
 		h.a.onAutoCheckChanged(true)
 		h.a.win.SetText(sample)
 		h.a.onAutoCheckChanged(false)
 	})
-	time.Sleep(150 * time.Millisecond)
+	h.sleep(150 * time.Millisecond)
 	if n := len(fake.Calls()); n != 0 {
 		t.Errorf("calls = %d, want 0 after turning auto-check off", n)
 	}
@@ -594,12 +619,12 @@ func TestAutoCheckWaitsForARunningCheck(t *testing.T) {
 	h.setText(sample)
 	h.checkButton() // manual check, slow
 	h.waitFor("the request", func() bool { return len(fake.Calls()) == 1 })
-	onUI(func() {
+	h.onUI(func() {
 		h.a.autoDelay = 40 * time.Millisecond
 		h.a.onAutoCheckChanged(true)
 		h.a.win.SetText(sample + " more")
 	})
-	time.Sleep(120 * time.Millisecond)
+	h.sleep(120 * time.Millisecond)
 	if n := len(fake.Calls()); n != 1 {
 		t.Errorf("calls = %d: the auto-check must not cancel the running manual check", n)
 	}
@@ -608,7 +633,7 @@ func TestAutoCheckWaitsForARunningCheck(t *testing.T) {
 
 func TestStateObserverIsWired(t *testing.T) {
 	h := newHarness(t, llmtest.New())
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SetText(sample)
 		rev := h.a.state.BeginCheck()
 		h.a.state.FinishCheck(rev, []issues.Item{{Start: 0, End: 5, Issue: analysis.Issue{Text: "He go", Type: analysis.Resolve("article")}}})

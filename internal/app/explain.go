@@ -5,8 +5,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/view"
 	"time"
 
-	"github.com/mappu/miqt/qt6/mainthread"
-
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/logging"
@@ -39,7 +37,7 @@ func (a *App) refreshList() {
 func (a *App) refreshCounts() {
 	a.goBackground(func() {
 		rows, err := a.stats.TypeStats(a.ctx)
-		mainthread.Start(func() {
+		a.rt.Post(func() {
 			if err != nil {
 				logging.LogError(a.log, "reading statistics", err)
 				return
@@ -102,9 +100,9 @@ func (a *App) explain(it issues.Item, regenerate bool) {
 	}
 	a.goBackground(func() {
 		res, err := a.explainer.Explain(a.ctx, m, req, func(chunk string) {
-			mainthread.Start(func() { a.onExplainChunk(seq, chunk) })
+			a.rt.Post(func() { a.onExplainChunk(seq, chunk) })
 		})
-		mainthread.Start(func() { a.finishExplain(seq, res, err) })
+		a.rt.Post(func() { a.finishExplain(seq, res, err) })
 	})
 }
 
@@ -114,7 +112,7 @@ func (a *App) loadHeaderCounts(seq uint64, it issues.Item) {
 	counted := a.resultRecorded
 	a.goBackground(func() {
 		c, err := a.stats.CountForType(a.ctx, it.Type.ID)
-		mainthread.Start(func() {
+		a.rt.Post(func() {
 			if seq != a.explainSeq {
 				return
 			}
@@ -142,7 +140,7 @@ func (a *App) onExplainChunk(seq uint64, chunk string) {
 func (a *App) renderNow() {
 	a.win.SetExplanationMarkdown(a.explainBuf.String())
 	a.explainDirty = false
-	a.renderTimer.Start(int(renderInterval / time.Millisecond))
+	a.renderTimer.Start(renderInterval)
 }
 
 func (a *App) onRenderTimer() {
@@ -192,7 +190,7 @@ func (a *App) onNotAnError() {
 	key := a.sourceKey
 	a.goBackground(func() {
 		err := a.stats.NotAnError(a.ctx, key, it.Fingerprint)
-		mainthread.Start(func() {
+		a.rt.Post(func() {
 			if err != nil {
 				logging.LogError(a.log, "removing a mistake", err)
 				a.win.ShowError(userMessage(err))

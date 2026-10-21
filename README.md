@@ -2,7 +2,7 @@
 
 A desktop app for practising written English. You write a sentence or an essay in a text editor, an LLM finds the grammar, syntax and vocabulary errors, and the app underlines them. Select an error and the app explains why it is wrong and shows better ways to say it, in markdown, next to the editor. It also counts how often you make each kind of mistake, so you can see what to work on.
 
-Written in Go with [miqt](https://github.com/mappu/miqt) (Qt 6 bindings) and [langchaingo](https://github.com/tmc/langchaingo). Works with Ollama, any OpenAI-compatible server, and Anthropic.
+Written in Go with [glutter](https://github.com/rm4n0s/glutter) (a Flutter-style toolkit for Linux, no Qt) and [langchaingo](https://github.com/tmc/langchaingo). Works with Ollama, any OpenAI-compatible server, and Anthropic.
 
 **New here?** The [tutorial](docs/TUTORIAL.md) walks through the app with screenshots. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
@@ -20,19 +20,18 @@ Written in Go with [miqt](https://github.com/mappu/miqt) (Qt 6 bindings) and [la
 ## Requirements
 
 - Go 1.27 or newer (see `go.mod`).
-- A C++ toolchain and the **Qt 6 development packages**, because miqt is a cgo binding and the build is not pure Go. `pkg-config` must find `Qt6Widgets`.
+- Linux with a Wayland compositor or an X server, and an EGL driver with OpenGL ES 3.0 (Mesa 20 or newer, NVIDIA through glvnd, or llvmpipe). glutter calls the system libraries (Wayland, xkbcommon, libdecor) at run time, so no toolkit packages are needed to build. `GLUTTER_BACKEND=x11|wayland` chooses the backend.
+- A C compiler (`gcc`), because the SQLite driver of gorm is a cgo binding.
 - A running LLM: for example [Ollama](https://ollama.com) with a model such as `llama3.1`, an OpenAI-compatible server, or an Anthropic API key.
 
-Installing Qt 6:
+Installing the C compiler:
 
 | System | Command |
 |---|---|
-| Fedora | `sudo dnf install qt6-qtbase-devel gcc-c++ pkgconf-pkg-config` |
-| Ubuntu / Debian | `sudo apt install qt6-base-dev g++ pkg-config` |
-| macOS | `brew install qt@6 pkg-config` |
-| Windows | See the [miqt README](https://github.com/mappu/miqt) (MSYS2 or Qt installer) |
+| Fedora | `sudo dnf install gcc` |
+| Ubuntu / Debian | `sudo apt install gcc` |
 
-Check with `pkg-config --modversion Qt6Widgets`.
+The application runs on Linux only.
 
 ## Build and run
 
@@ -41,18 +40,18 @@ go build -o english-tutor ./cmd/english-tutor
 ./english-tutor
 ```
 
-The first build compiles the Qt bindings and takes several minutes; later builds are fast because Go caches the result.
+The first build compiles SQLite and takes a minute or so; later builds are fast because Go caches the result.
 
 ### Install with `go install`
 
-Without cloning the repository (the Qt 6 packages and the C++ toolchain above are needed all the same):
+Without cloning the repository (the C compiler above is needed all the same):
 
 ```
 go install github.com/rm4n0s/english-tutor/cmd/english-tutor@latest
 english-tutor
 ```
 
-The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. There are no tagged versions yet, so `@latest` is the newest commit of `main`; use `@main` to say so, or a commit hash to pin one. From a clone, `go install ./cmd/english-tutor` does the same. The first build takes several minutes, like `go build`.
+The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. There are no tagged versions yet, so `@latest` is the newest commit of `main`; use `@main` to say so, or a commit hash to pin one. From a clone, `go install ./cmd/english-tutor` does the same. The first build is slow, like `go build`.
 
 ## First steps
 
@@ -115,7 +114,7 @@ go test -race ./...
 gofmt -l .
 ```
 
-All four checks must pass before work is merged. There is no CI: they are run locally. The Qt tests need no display, because they run with `QT_QPA_PLATFORM=offscreen` through `internal/uitest`; if Qt's offscreen plugin is missing they are skipped with a message.
+All four checks must pass before work is merged. There is no CI: they are run locally. The window tests need no display: they run on glutter's test host (`gluttertest`), with a fake clock.
 
 Layout:
 
@@ -126,11 +125,11 @@ internal/logging     slog with a rotated log file
 internal/store       gorm models, numbered migrations, statistics, usage
 internal/llm         langchaingo factory, token usage, fake model for tests
 internal/analysis    prompts, parsing, locating, chunking, analyzer, explainer
-internal/issues      issue state, selection, edit rebasing (no Qt)
-internal/ui          Qt windows and dialogs, tray
-internal/web         the web server: access rules, per-tab state, Datastar pages (no Qt)
+internal/issues      issue state, selection, edit rebasing (no GUI)
+internal/gui         glutter windows, dialogs, editor, tray
+internal/web         the web server: access rules, per-tab state, Datastar pages (no GUI)
 internal/app         wiring: checks, saving, preferences
-internal/uitest      Qt test harness
+internal/view        what the windows show, without a toolkit (colours, formats)
 internal/specs       keeps the spec's error table and the tests in step
 docs/                SPEC.md, TUTORIAL.md (with images/), IMPLEMENTATION.md (plan), IMPLEMENTED.md (log)
 ```
@@ -156,7 +155,7 @@ The automated tests use fake LLMs and an offscreen display. Before a release, ru
 13. Press the X button: the window goes and a tray icon stays. **Open** (or a click on the icon) brings the same text back. With unsaved changes, tray **Close** asks first and quits; without a tray, X quits.
 14. Press **Start web server** (or the tray item) and open the page in a browser: write, Check, click an underline and a row, press `F7`, open Preferences, Statistics and the Library, upload a file with Open and download with Save. Start a second tab: it has its own text. Press **Stop web server**: the pages stop answering.
 15. Occupy port 3333 with another program and press **Start web server**: a banner names the port. Set a password on the Web server tab and open the page from another computer: it asks for the password, and five wrong ones lock that computer out for a while.
-16. Select a single word, right-click and choose **Alternative**: the window opens at once with a busy indicator and then lists a few replacements. Do the same with a paragraph, and with only a space selected (no such entry). Double-click a row: the selection is replaced and the window closes; `Ctrl+Z` brings the old text back. Press Copy on another row and paste. Close the window while it is still loading: nothing is reported as an error.
+16. Select a single word, right-click and choose **Alternative**: the Alternatives panel opens at once with a busy indicator and then lists a few replacements. Do the same with a paragraph, and with only a space selected (no such entry). Double-click a row: the selection is replaced and the window closes; `Ctrl+Z` brings the old text back. Press Copy on another row and paste. Close the window while it is still loading: nothing is reported as an error.
 17. Select the second sentence of a checked text, right-click and choose **Check**: a grey layer with a busy indicator covers the editor, typing does nothing, and the status bar says `Checking...`. When it ends the layer goes; underlines in the other sentences are unchanged and the ones in the selection are the new result. Do it again and press **Cancel** while it runs: the layer goes and nothing changes. With only a space selected, or no LLM configured, there is no usable Check entry.
 
 ## Known limits

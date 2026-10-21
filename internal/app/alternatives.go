@@ -1,11 +1,9 @@
 package app
 
 import (
-	"github.com/mappu/miqt/qt6/mainthread"
-
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/logging"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // onAlternative is the Alternative entry of the editor's right-click menu: it
@@ -22,8 +20,8 @@ func (a *App) onAlternative(start, end int) {
 	}
 
 	a.closeAlternatives()
-	var dlg *ui.AlternativesDialog
-	dlg = ui.NewAlternativesDialog(a.win.Widget(), selected, ui.AlternativesHooks{
+	var dlg *gui.AlternativesDialog
+	dlg = gui.NewAlternativesDialog(a.win, selected, gui.AlternativesHooks{
 		Retry:  func() { a.requestAlternatives(dlg, req) },
 		Chosen: func(alt string) { a.useAlternative(dlg, start, end, selected, alt) },
 		Closed: func() { a.dropAlternatives(dlg) },
@@ -37,7 +35,7 @@ func (a *App) onAlternative(start, end int) {
 // place of the selection it was asked for, and closes the window. If the text
 // at that place is no longer the selection (the user went on typing), nothing is
 // changed and the window says so, because replacing other words would lose text.
-func (a *App) useAlternative(dlg *ui.AlternativesDialog, start, end int, selected, alt string) {
+func (a *App) useAlternative(dlg *gui.AlternativesDialog, start, end int, selected, alt string) {
 	text := a.win.Text()
 	um := analysis.NewUTF16Map(text)
 	bs, be := um.ByteOffset(start), um.ByteOffset(end)
@@ -52,7 +50,7 @@ func (a *App) useAlternative(dlg *ui.AlternativesDialog, start, end int, selecte
 
 // requestAlternatives runs the request in the background and shows its outcome
 // in dlg.
-func (a *App) requestAlternatives(dlg *ui.AlternativesDialog, req analysis.AlternativesRequest) {
+func (a *App) requestAlternatives(dlg *gui.AlternativesDialog, req analysis.AlternativesRequest) {
 	a.altSeq++
 	seq := a.altSeq
 	dlg.SetLoading()
@@ -63,12 +61,12 @@ func (a *App) requestAlternatives(dlg *ui.AlternativesDialog, req analysis.Alter
 	}
 	a.goBackground(func() {
 		res, err := a.suggester.Suggest(a.ctx, m, req)
-		mainthread.Start(func() { a.finishAlternatives(seq, dlg, res, err) })
+		a.rt.Post(func() { a.finishAlternatives(seq, dlg, res, err) })
 	})
 }
 
 // finishAlternatives runs on the UI thread when a request has ended.
-func (a *App) finishAlternatives(seq uint64, dlg *ui.AlternativesDialog, res analysis.AlternativesResult, err error) {
+func (a *App) finishAlternatives(seq uint64, dlg *gui.AlternativesDialog, res analysis.AlternativesResult, err error) {
 	a.addUsage(res.Usage) // the tokens were spent whatever happened next
 	if seq != a.altSeq {
 		return // the window was closed or asked again; this answer is stale
@@ -84,7 +82,7 @@ func (a *App) finishAlternatives(seq uint64, dlg *ui.AlternativesDialog, res ana
 	}
 }
 
-func (a *App) alternativesFailed(dlg *ui.AlternativesDialog, err error) {
+func (a *App) alternativesFailed(dlg *gui.AlternativesDialog, err error) {
 	logging.LogError(a.log, "alternatives failed", err)
 	dlg.SetFailed(userMessage(err))
 }
@@ -99,12 +97,11 @@ func (a *App) closeAlternatives() {
 
 // dropAlternatives forgets dlg after it was closed and stops its request. It is
 // safe to call more than once.
-func (a *App) dropAlternatives(dlg *ui.AlternativesDialog) {
+func (a *App) dropAlternatives(dlg *gui.AlternativesDialog) {
 	if a.altDlg != dlg {
 		return
 	}
 	a.altDlg = nil
 	a.altSeq++ // an answer that is still on its way is stale now
 	a.suggester.Cancel()
-	dlg.Dialog().DeleteLater()
 }

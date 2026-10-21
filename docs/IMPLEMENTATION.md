@@ -16,12 +16,12 @@ Steps for building English Tutor as described in [SPEC.md](SPEC.md). Finished st
 4. **Add the step's entry to `docs/IMPLEMENTED.md` on the branch**, as the last commit of the step (format below).
 5. **Publish by fast-forward, without a PR:** `git switch main && git merge --ff-only feat/<slug> && git push origin main`. If `main` has moved, rebase the branch on `main`, run the four checks again, and then merge. After publishing, delete the local branch.
 6. **No `.github/` directory and no GitHub Actions.** The checks run locally.
-7. **Dependencies:** only `github.com/mappu/miqt`, `github.com/tmc/langchaingo`, `gorm.io/gorm` and `github.com/rm4n0s/errors` are approved. Anything else (including the gorm SQLite driver) needs the user's approval before it is added.
+7. **Dependencies:** only `github.com/rm4n0s/glutter`, `github.com/tmc/langchaingo`, `gorm.io/gorm` and `github.com/rm4n0s/errors` are approved. Anything else (including the gorm SQLite driver) needs the user's approval before it is added.
 8. **Code conventions** are those in CLAUDE.md: errors with `github.com/rm4n0s/errors` and a route test per tag, table-driven tests, no global mutable state, `context.Context` first for I/O, no hand-written SQL, and the schema only through numbered Go migrations.
 9. **The spec follows the code.** If a step shows that SPEC.md is wrong or incomplete, the fix to SPEC.md is part of that step and is mentioned in its IMPLEMENTED.md entry.
 10. **Changes not listed here** (fixes after a step is published, extra features) follow the normal rule in CLAUDE.md: a `feat/...` or `fix/...` branch, and a PR instead of a direct publish.
 11. Commit messages are in the imperative mood ("Add store migrations").
-12. Tests that need Qt run with `QT_QPA_PLATFORM=offscreen`. If Qt cannot start, those tests are skipped and the skip is reported.
+12. Tests of windows run on glutter's test host (`gluttertest`), which needs no display.
 
 ### Format of an IMPLEMENTED.md entry
 

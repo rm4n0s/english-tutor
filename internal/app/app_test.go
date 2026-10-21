@@ -9,10 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/rm4n0s/glutter/gluttertest"
 
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/uitest"
 )
 
 type syncBuffer struct {
@@ -55,15 +54,23 @@ func addLLM(t *testing.T, st *store.Store, name string) uint {
 	return cfg.ID
 }
 
-// withApp builds an App on the Qt thread and closes its window afterwards.
+// withApp builds an App on the test goroutine, which glutter's test binding takes
+// as the UI thread, and disposes of its window afterwards.
 func withApp(t *testing.T, st *store.Store, f func(a *App, logs *syncBuffer)) {
 	t.Helper()
+	withAppTester(t, st, func(a *App, logs *syncBuffer, _ *gluttertest.Tester) { f(a, logs) })
+}
+
+// withAppTester is withApp for a test that also needs the tester, to pump frames
+// and find widgets.
+func withAppTester(t *testing.T, st *store.Store, f func(a *App, logs *syncBuffer, tester *gluttertest.Tester)) {
+	t.Helper()
 	logs := &syncBuffer{}
-	uitest.OnUI(func() {
-		a := New(context.Background(), slog.New(slog.NewTextHandler(logs, nil)), st)
-		defer a.win.Widget().Delete()
-		f(a, logs)
-	})
+	tester := gluttertest.New(t)
+	a := New(context.Background(), slog.New(slog.NewTextHandler(logs, nil)), st)
+	defer a.win.Dispose()
+	tester.PumpWidget(a.Root())
+	f(a, logs, tester)
 }
 
 func TestNewAppWithFreshDatabase(t *testing.T) {
@@ -137,43 +144,53 @@ func TestClosingSavesTheWindowState(t *testing.T) {
 	st := newStore(t)
 
 	var sizes []int
-	withApp(t, st, func(a *App, _ *syncBuffer) {
+	withAppTester(t, st, func(a *App, _ *syncBuffer, tester *gluttertest.Tester) {
 		w := a.Window()
 		a.Show()
-		qt.QCoreApplication_ProcessEvents()
+		tester.Pump()
 		w.SetSplitterSizes([]int{500, 250, 100, 300})
-		qt.QCoreApplication_ProcessEvents()
+		tester.Pump()
 		sizes = w.SplitterSizes()
-		w.Close()
+		w.SetWindowSize(1000, 640)
+		w.Close() // no tray: the application ends, with nothing to ask
+		if !w.Quitting() {
+			t.Error("closing the window without a tray ends the application")
+		}
 	})
 	geometry, err := st.WindowGeometry(ctx)
-	if err != nil || len(geometry) == 0 {
-		t.Fatalf("geometry not saved: %v, %v", geometry, err)
+	if err != nil || string(geometry) != "1000x640" {
+		t.Fatalf("geometry saved: %q, %v", geometry, err)
 	}
 	saved, err := st.SplitterSizes(ctx)
 	if err != nil || !slices.Equal(saved, sizes) {
 		t.Fatalf("saved sizes = %v, %v; want %v", saved, err, sizes)
 	}
 
-	// The next start uses them.
-	withApp(t, st, func(a *App, _ *syncBuffer) {
-		a.Show()
-		qt.QCoreApplication_ProcessEvents()
-		got := a.Window().SplitterSizes()
-		if len(got) != 4 {
-			t.Fatalf("restored sizes = %v", got)
-		}
-		// The offscreen screen is smaller than the window was, so the window
-		// comes back narrower: compare the proportions of the horizontal
-		// splitter. Heights do not change.
-		ratio := func(a, b int) float64 { return float64(a) / float64(b) }
-		if d := ratio(got[0], got[1]) - ratio(sizes[0], sizes[1]); d < -0.1 || d > 0.1 {
-			t.Errorf("horizontal sizes %v do not keep the proportions of %v", got[:2], sizes[:2])
-		}
-		if d := ratio(got[2], got[3]) - ratio(sizes[2], sizes[3]); d < -0.1 || d > 0.1 {
-			t.Errorf("vertical sizes %v do not keep the proportions of %v", got[2:], sizes[2:])
-		}
-	})
+	// The next start uses them. The size goes to the window that is opened, so it
+	// is read before the test's own window of 800x600 lays the application out.
+	logs := &syncBuffer{}
+	tester := gluttertest.New(t)
+	a := New(ctx, slog.New(slog.NewTextHandler(logs, nil)), st)
+	defer a.win.Dispose()
+	if width, height := a.Window().WindowSize(); width != 1000 || height != 640 {
+		t.Errorf("window size = %dx%d", width, height)
+	}
+	tester.PumpWidget(a.Root())
+	a.Show()
+	tester.Pump()
+	got := a.Window().SplitterSizes()
+	if len(got) != 4 {
+		t.Fatalf("restored sizes = %v", got)
+	}
+	// The window comes back at its size but the room of the panes differs a
+	// little (the bars and the toolbar), so compare the proportions.
+	ratio := func(a, b int) float64 { return float64(a) / float64(b) }
+	if d := ratio(got[0], got[1]) - ratio(sizes[0], sizes[1]); d < -0.1 || d > 0.1 {
+		t.Errorf("horizontal sizes %v do not keep the proportions of %v", got[:2], sizes[:2])
+	}
+	if d := ratio(got[2], got[3]) - ratio(sizes[2], sizes[3]); d < -0.1 || d > 0.1 {
+		t.Errorf("vertical sizes %v do not keep the proportions of %v", got[2:], sizes[2:])
+	}
 }
 
 func TestStartsWhenSettingsCannotBeRead(t *testing.T) {

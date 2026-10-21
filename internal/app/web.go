@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/rm4n0s/english-tutor/internal/ui"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/web"
 )
 
@@ -98,16 +98,16 @@ func (a *App) onWebSettingsChanged() {
 
 // WebSettings, SetWebPort and SetWebPassword are the Web server tab of the
 // Preferences dialog.
-func (p preferences) WebSettings(ctx context.Context) (ui.WebSettings, error) {
+func (p preferences) WebSettings(ctx context.Context) (gui.WebSettings, error) {
 	port, err := p.store.WebPort(ctx)
 	if err != nil {
-		return ui.WebSettings{}, err
+		return gui.WebSettings{}, err
 	}
 	hash, err := p.store.WebPasswordHash(ctx)
 	if err != nil {
-		return ui.WebSettings{}, err
+		return gui.WebSettings{}, err
 	}
-	return ui.WebSettings{Port: port, HasPassword: hash != ""}, nil
+	return gui.WebSettings{Port: port, HasPassword: hash != ""}, nil
 }
 
 func (p preferences) SetWebPort(ctx context.Context, port int) error {

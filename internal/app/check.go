@@ -5,17 +5,15 @@ import (
 	"fmt"
 	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
-	"time"
 
-	"github.com/mappu/miqt/qt6/mainthread"
 	"github.com/rm4n0s/errors"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // newSessionKey returns the source key of a new, unsaved text:
@@ -97,7 +95,7 @@ func (a *App) beginCheck(manual bool, scope *checkScope) {
 		var placed analysis.LocateResult
 		placed.Append(res.LocateResult, offset)
 		res.LocateResult = placed
-		mainthread.Start(func() { a.finishCheck(seq, rev, manual, scope, m.Name, text, res, err) })
+		a.rt.Post(func() { a.finishCheck(seq, rev, manual, scope, m.Name, text, res, err) })
 	})
 }
 
@@ -223,7 +221,7 @@ func (a *App) recordMistakes(llmName, text string, placed []analysis.Placed) {
 	key := a.sourceKey
 	a.goBackground(func() {
 		res, err := a.stats.Record(a.ctx, key, llmName, mistakes)
-		mainthread.Start(func() {
+		a.rt.Post(func() {
 			if err != nil {
 				logging.LogError(a.log, "recording mistakes", err)
 				a.win.ShowError(userMessage(err))
@@ -284,9 +282,9 @@ func (a *App) onStateChange(c issues.Change) {
 func (a *App) refreshUnderlines() {
 	selected, hasSelected := a.state.Selected()
 	visible := a.state.Visible()
-	us := make([]ui.Underline, len(visible))
+	us := make([]gui.Underline, len(visible))
 	for i, it := range visible {
-		us[i] = ui.Underline{Start: it.Start, End: it.End, Category: it.Category(), Selected: hasSelected && it.ID == selected.ID}
+		us[i] = gui.Underline{Start: it.Start, End: it.End, Category: it.Category(), Selected: hasSelected && it.ID == selected.ID}
 	}
 	a.win.SetUnderlines(us)
 }
@@ -321,7 +319,7 @@ func (a *App) tooltipAt(pos int) string {
 // onTextChanged restarts the auto-check timer while auto-check is on.
 func (a *App) onTextChanged() {
 	if a.autoCheck {
-		a.autoTimer.Start(int(a.autoDelay / time.Millisecond))
+		a.autoTimer.Start(a.autoDelay)
 	}
 }
 
@@ -339,7 +337,7 @@ func (a *App) onAutoCheckTimer() {
 		return
 	}
 	if a.checking {
-		a.autoTimer.Start(int(a.autoDelay / time.Millisecond))
+		a.autoTimer.Start(a.autoDelay)
 		return
 	}
 	a.startCheck(false)

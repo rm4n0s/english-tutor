@@ -108,170 +108,199 @@ func (a *App) setSource(key string, move bool) {
 }
 
 // confirmDiscard asks what to do with unsaved changes before the text is
-// replaced or the window closes. It returns true when the caller may go on.
-func (a *App) confirmDiscard() bool {
+// replaced or the window closes. It reports true to done when the caller may go
+// on.
+func (a *App) confirmDiscard(done func(ok bool)) {
 	if !a.win.Modified() {
-		return true
+		done(true)
+		return
 	}
-	switch a.dialogs.AskUnsaved(a.displayName()) {
-	case UnsavedDiscard:
-		return true
-	case UnsavedSave:
-		return a.saveForClose()
-	default:
-		return false
-	}
+	a.dialogs.AskUnsaved(a.displayName(), func(choice UnsavedChoice) {
+		switch choice {
+		case UnsavedDiscard:
+			done(true)
+		case UnsavedSave:
+			a.saveForClose(done)
+		default:
+			done(false)
+		}
+	})
 }
 
 // saveForClose saves in the place the text belongs to: the library if its
 // source is a library document, else its file (asking for one if it has none).
-func (a *App) saveForClose() bool {
+func (a *App) saveForClose(done func(ok bool)) {
 	if strings.HasPrefix(a.sourceKey, "doc:") {
-		return a.saveToLibrary()
+		a.saveToLibrary(done)
+		return
 	}
-	return a.save()
+	a.save(done)
 }
 
 // onNew starts an empty text.
 func (a *App) onNew() {
-	if !a.confirmDiscard() {
-		return
-	}
-	a.place = place{lineEnding: lineEndingLF}
-	a.resetText("")
-	a.setSource(newSessionKey(), false)
-	a.updateTitle()
+	a.confirmDiscard(func(ok bool) {
+		if !ok {
+			return
+		}
+		a.place = place{lineEnding: lineEndingLF}
+		a.resetText("")
+		a.setSource(newSessionKey(), false)
+		a.updateTitle()
+	})
 }
 
 // onOpen opens a text file. The file is read before anything is replaced, so a
 // file that cannot be opened leaves the current text alone.
 func (a *App) onOpen() {
-	path, ok := a.dialogs.ChooseOpenFile()
-	if !ok {
-		return
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = path
-	}
-	text, ending, err := readTextFile(a.ctx, abs)
-	if err != nil {
-		a.showError("opening a file", err)
-		return
-	}
-	if !a.confirmDiscard() {
-		return
-	}
-	a.place = place{filePath: abs, lineEnding: ending, name: filepath.Base(abs)}
-	a.resetText(text)
-	a.setSource("file:"+abs, false)
-	a.updateTitle()
+	a.dialogs.ChooseOpenFile(func(path string, ok bool) {
+		if !ok {
+			return
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		text, ending, err := readTextFile(a.ctx, abs)
+		if err != nil {
+			a.showError("opening a file", err)
+			return
+		}
+		a.confirmDiscard(func(ok bool) {
+			if !ok {
+				return
+			}
+			a.place = place{filePath: abs, lineEnding: ending, name: filepath.Base(abs)}
+			a.resetText(text)
+			a.setSource("file:"+abs, false)
+			a.updateTitle()
+		})
+	})
 }
 
 // onSave writes the text to its file, or behaves like Save As if it has none.
-func (a *App) onSave() { a.save() }
+func (a *App) onSave() { a.save(func(bool) {}) }
 
-func (a *App) save() bool {
+func (a *App) save(done func(ok bool)) {
 	if a.place.filePath == "" {
-		return a.saveAs()
+		a.saveAs(done)
+		return
 	}
 	if err := writeTextFile(a.ctx, a.place.filePath, a.win.Text(), a.place.lineEnding); err != nil {
 		a.showError("saving a file", err)
-		return false
+		done(false)
+		return
 	}
 	a.win.SetModified(false)
 	a.updateTitle()
-	return true
+	done(true)
 }
 
 // onSaveAs asks for a file and saves the text there.
-func (a *App) onSaveAs() { a.saveAs() }
+func (a *App) onSaveAs() { a.saveAs(func(bool) {}) }
 
-func (a *App) saveAs() bool {
+func (a *App) saveAs(done func(ok bool)) {
 	suggested := a.place.filePath
 	if suggested == "" {
 		suggested = defaultDocumentTitle(a.win.Text()) + ".txt"
 	}
-	path, ok := a.dialogs.ChooseSaveFile(suggested)
-	if !ok {
-		return false
-	}
-	if filepath.Ext(path) == "" {
-		path += ".txt"
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		abs = path
-	}
-	ending := a.place.lineEnding
-	if ending == "" {
-		ending = lineEndingLF
-	}
-	if err := writeTextFile(a.ctx, abs, a.win.Text(), ending); err != nil {
-		a.showError("saving a file", err)
-		return false
-	}
-	a.place.filePath, a.place.lineEnding, a.place.name = abs, ending, filepath.Base(abs)
-	a.setSource("file:"+abs, true)
-	a.win.SetModified(false)
-	a.updateTitle()
-	return true
+	a.dialogs.ChooseSaveFile(suggested, func(path string, ok bool) {
+		if !ok {
+			done(false)
+			return
+		}
+		if filepath.Ext(path) == "" {
+			path += ".txt"
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		ending := a.place.lineEnding
+		if ending == "" {
+			ending = lineEndingLF
+		}
+		if err := writeTextFile(a.ctx, abs, a.win.Text(), ending); err != nil {
+			a.showError("saving a file", err)
+			done(false)
+			return
+		}
+		a.place.filePath, a.place.lineEnding, a.place.name = abs, ending, filepath.Base(abs)
+		a.setSource("file:"+abs, true)
+		a.win.SetModified(false)
+		a.updateTitle()
+		done(true)
+	})
 }
 
 // onSaveToLibrary stores the text in the library: a new document (asking for a
 // title) or, if the text came from the library, an update of that document.
-func (a *App) onSaveToLibrary() { a.saveToLibrary() }
+func (a *App) onSaveToLibrary() { a.saveToLibrary(func(bool) {}) }
 
-func (a *App) saveToLibrary() bool {
+func (a *App) saveToLibrary(done func(ok bool)) {
 	text := a.win.Text()
 	if a.place.docID == 0 {
-		title, ok := a.dialogs.AskDocumentTitle(defaultDocumentTitle(text))
-		if !ok {
-			return false
-		}
-		doc := &store.Document{Title: title, Content: text}
-		if err := a.store.CreateDocument(a.ctx, doc); err != nil {
-			a.showError("saving to the library", err)
-			return false
-		}
-		a.place.docID, a.place.docTitle = doc.ID, doc.Title
-	} else {
-		doc := &store.Document{ID: a.place.docID, Title: a.place.docTitle, Content: text}
-		if err := a.store.UpdateDocument(a.ctx, doc); err != nil {
-			if appErr, ok := errors.FromError(err); ok && appErr.HasRoute("DocumentNotFound") {
-				// Deleted from the library in the meantime: the next save
-				// creates a new document.
-				a.place.docID, a.place.docTitle = 0, ""
+		a.dialogs.AskDocumentTitle(defaultDocumentTitle(text), func(title string, ok bool) {
+			if !ok {
+				done(false)
+				return
 			}
-			a.showError("saving to the library", err)
-			return false
-		}
+			doc := &store.Document{Title: title, Content: text}
+			if err := a.store.CreateDocument(a.ctx, doc); err != nil {
+				a.showError("saving to the library", err)
+				done(false)
+				return
+			}
+			a.place.docID, a.place.docTitle = doc.ID, doc.Title
+			a.savedToLibrary()
+			done(true)
+		})
+		return
 	}
+	doc := &store.Document{ID: a.place.docID, Title: a.place.docTitle, Content: text}
+	if err := a.store.UpdateDocument(a.ctx, doc); err != nil {
+		if appErr, ok := errors.FromError(err); ok && appErr.HasRoute("DocumentNotFound") {
+			// Deleted from the library in the meantime: the next save
+			// creates a new document.
+			a.place.docID, a.place.docTitle = 0, ""
+		}
+		a.showError("saving to the library", err)
+		done(false)
+		return
+	}
+	a.savedToLibrary()
+	done(true)
+}
+
+// savedToLibrary records that the text now belongs to its library document.
+func (a *App) savedToLibrary() {
 	a.place.name = a.place.docTitle
 	a.setSource(fmt.Sprintf("doc:%d", a.place.docID), true)
 	a.win.SetModified(false)
 	a.updateTitle()
-	return true
 }
 
 // onLibrary opens the Library and loads the document the user picks.
 func (a *App) onLibrary() {
-	id, ok := a.dialogs.ChooseDocument()
-	if !ok {
-		return
-	}
-	doc, err := a.store.GetDocument(a.ctx, id)
-	if err != nil {
-		a.showError("opening a library document", err)
-		return
-	}
-	if !a.confirmDiscard() {
-		return
-	}
-	a.place = place{docID: doc.ID, docTitle: doc.Title, name: doc.Title, lineEnding: lineEndingLF}
-	a.resetText(doc.Content)
-	a.setSource(fmt.Sprintf("doc:%d", doc.ID), false)
-	a.updateTitle()
+	a.dialogs.ChooseDocument(func(id uint, ok bool) {
+		if !ok {
+			return
+		}
+		doc, err := a.store.GetDocument(a.ctx, id)
+		if err != nil {
+			a.showError("opening a library document", err)
+			return
+		}
+		a.confirmDiscard(func(ok bool) {
+			if !ok {
+				return
+			}
+			a.place = place{docID: doc.ID, docTitle: doc.Title, name: doc.Title, lineEnding: lineEndingLF}
+			a.resetText(doc.Content)
+			a.setSource(fmt.Sprintf("doc:%d", doc.ID), false)
+			a.updateTitle()
+		})
+	})
 }
 
 // onDocumentRenamed keeps the title of the open document in step with the library.
@@ -293,8 +322,3 @@ func (a *App) onDocumentDeleted(id uint) {
 		a.place.docID, a.place.docTitle = 0, ""
 	}
 }
-
-// canClose is asked when the user closes the window. With a tray icon the window
-// is only hidden, so nothing is lost and nothing is asked; the question comes
-// when the application quits (Quit).
-func (a *App) canClose() bool { return a.tray != nil || a.confirmDiscard() }

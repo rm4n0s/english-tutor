@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 func altReply(alts ...string) llmtest.Reply {
@@ -24,7 +24,7 @@ func altReply(alts ...string) llmtest.Reply {
 // editor's right-click menu, as the user would.
 func (h *harness) askAlternatives(start, end int) {
 	h.t.Helper()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SelectRange(start, end)
 		if !h.a.win.TriggerEditorMenu("Alternative") {
 			h.t.Error("the menu has no Alternative entry")
@@ -32,8 +32,8 @@ func (h *harness) askAlternatives(start, end int) {
 	})
 }
 
-func (h *harness) altDialog() (d *ui.AlternativesDialog) {
-	onUI(func() { d = h.a.altDlg })
+func (h *harness) altDialog() (d *gui.AlternativesDialog) {
+	h.onUI(func() { d = h.a.altDlg })
 	return d
 }
 
@@ -49,7 +49,7 @@ func TestAlternativeFromTheContextMenu(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(3, 5) // "go"
 
-	onUI(func() {
+	h.onUI(func() {
 		d := h.a.altDlg
 		if d == nil || !d.IsVisible() {
 			t.Fatal("the Alternatives window should be open")
@@ -59,7 +59,7 @@ func TestAlternativeFromTheContextMenu(t *testing.T) {
 		}
 	})
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		d := h.a.altDlg
 		if !slices.Equal(d.Alternatives(), []string{"huge", "large", "a big one"}) || d.StatusText() != "3 alternatives" || d.ErrorText() != "" {
 			t.Errorf("alternatives %q, status %q, error %q", d.Alternatives(), d.StatusText(), d.ErrorText())
@@ -102,7 +102,7 @@ func TestAlternativeSelections(t *testing.T) {
 			h.setText(tt.text)
 			h.askAlternatives(tt.start, tt.end)
 			h.waitAlternatives()
-			onUI(func() {
+			h.onUI(func() {
 				if got := h.a.altDlg.SelectionText(); got != tt.want {
 					t.Errorf("the window shows %q, want %q", got, tt.want)
 				}
@@ -118,7 +118,7 @@ func TestAlternativeNeedsASelection(t *testing.T) {
 	fake := llmtest.New(altReply("x"))
 	h := newHarness(t, fake)
 	h.setText(sample)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SelectRange(3, 3)
 		if h.a.win.TriggerEditorMenu("Alternative") {
 			t.Error("Alternative is offered without a selection")
@@ -142,7 +142,7 @@ func TestAlternativeFailureThenRetry(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(3, 5)
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		d := h.a.altDlg
 		if !strings.Contains(d.ErrorText(), "connection refused") || !d.RetryVisible() || len(d.Alternatives()) != 0 {
 			t.Errorf("error %q, retry %v", d.ErrorText(), d.RetryVisible())
@@ -156,7 +156,7 @@ func TestAlternativeFailureThenRetry(t *testing.T) {
 		}
 	})
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.altDlg.Alternatives(); !slices.Equal(got, []string{"huge"}) {
 			t.Errorf("after Retry: %q", got)
 		}
@@ -171,7 +171,7 @@ func TestAlternativeInvalidReplyFailsWithItsMessage(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(3, 5)
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.altDlg.ErrorText(); got != "The model's answer was not in the expected format." {
 			t.Errorf("error = %q", got)
 		}
@@ -185,7 +185,7 @@ func TestAlternativeSelectionTooLong(t *testing.T) {
 	h.setText(long)
 	h.askAlternatives(0, len(long))
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.altDlg.ErrorText(); !strings.Contains(got, "select at most 600") {
 			t.Errorf("error = %q", got)
 		}
@@ -219,8 +219,8 @@ func TestClosingTheWindowCancelsTheRequest(t *testing.T) {
 	h.askAlternatives(3, 5)
 	h.waitFor("the request to start", func() bool { return len(fake.Calls()) == 1 })
 
-	var dlg *ui.AlternativesDialog
-	onUI(func() {
+	var dlg *gui.AlternativesDialog
+	h.onUI(func() {
 		dlg = h.a.altDlg
 		dlg.Close()
 		if h.a.altDlg != nil {
@@ -228,7 +228,7 @@ func TestClosingTheWindowCancelsTheRequest(t *testing.T) {
 		}
 	})
 	h.settle() // the request must end by itself, long before its 5 s delay
-	onUI(func() {
+	h.onUI(func() {
 		if len(dlg.Alternatives()) != 0 {
 			t.Error("a closed window must not receive an answer")
 		}
@@ -254,7 +254,7 @@ func TestAskingAgainReplacesTheWindow(t *testing.T) {
 
 	h.askAlternatives(12, 20) // "She have"
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		second := h.a.altDlg
 		if second == first || first.IsVisible() {
 			t.Error("the first window should be closed and replaced")
@@ -278,7 +278,7 @@ func TestAskingWithTheWindowOpenAsksAgain(t *testing.T) {
 	h.askAlternatives(0, 2)
 	h.waitFor("the second request", func() bool { return len(fake.Calls()) == 2 })
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		if got := h.a.altDlg.SelectionText(); got != "He" {
 			t.Errorf("selection = %q", got)
 		}
@@ -308,11 +308,12 @@ func TestDoubleClickReplacesTheSelectionAndClosesTheWindow(t *testing.T) {
 			}[tt.name]
 			h := newHarness(t, llmtest.New(altReply(alts...)))
 			h.setText(tt.text)
-			onUI(func() { h.a.win.SetModified(false) })
+			h.onUI(func() { h.a.win.SetModified(false) })
+			h.pumpHistory()
 			h.askAlternatives(tt.start, tt.end)
 			h.waitAlternatives()
-			var dlg *ui.AlternativesDialog
-			onUI(func() {
+			var dlg *gui.AlternativesDialog
+			h.onUI(func() {
 				dlg = h.a.altDlg
 				dlg.DoubleClickRow(tt.row)
 				if got := h.a.win.Text(); got != tt.want {
@@ -327,7 +328,9 @@ func TestDoubleClickReplacesTheSelectionAndClosesTheWindow(t *testing.T) {
 				if h.a.win.ErrorText() != "" {
 					t.Errorf("banner: %q", h.a.win.ErrorText())
 				}
+				h.pumpHistory()
 				h.a.win.Undo()
+				h.tester.Pump()
 				if got := h.a.win.Text(); got != tt.text {
 					t.Errorf("one undo should bring back %q, got %q", tt.text, got)
 				}
@@ -347,7 +350,7 @@ func TestReplacingDropsTheIssueUnderTheSelection(t *testing.T) {
 	}
 	h.askAlternatives(0, 5) // "He go", the first issue
 	h.waitAlternatives()
-	onUI(func() { h.a.altDlg.DoubleClickRow(0) })
+	h.onUI(func() { h.a.altDlg.DoubleClickRow(0) })
 	us := h.underlines()
 	if len(us) != 1 || us[0].Start != 14 || us[0].End != 22 {
 		t.Errorf("the replaced issue goes and the other one moves: %+v", us)
@@ -359,7 +362,7 @@ func TestDoubleClickAfterTheTextChangedReplacesNothing(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(3, 5) // "go"
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.InsertTextAt(0, "Well, ") // the user kept typing: "go" moved
 		before := h.a.win.Text()
 		h.a.altDlg.DoubleClickRow(0)
@@ -381,7 +384,7 @@ func TestDoubleClickWhenTheSelectedWordsWereEditedInPlace(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(3, 5)
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.ReplaceRange(3, 5, "ran") // same place, other words
 		h.a.altDlg.DoubleClickRow(0)
 		if got := h.a.win.Text(); got != "He ran home. She have a cat." {
@@ -398,7 +401,7 @@ func TestDoubleClickWhenTheTextGotShorter(t *testing.T) {
 	h.setText(sample)
 	h.askAlternatives(12, 20)
 	h.waitAlternatives()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SetText("short")
 		h.a.altDlg.DoubleClickRow(0)
 		if h.a.win.Text() != "short" || h.a.altDlg == nil || h.a.altDlg.ErrorText() == "" {

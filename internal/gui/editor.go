@@ -167,8 +167,15 @@ func (e *Editor) setValue(text string, caretByte int) {
 	}))
 }
 
-// SetText replaces the text and puts the caret at its end.
-func (e *Editor) SetText(text string) { e.setValue(text, len(text)) }
+// SetText replaces the text, as setting the whole text of a field does: the
+// caret goes to the end, the text counts as saved and the undo history starts
+// again. Use TypeIntoEditor for text that the user types.
+func (e *Editor) SetText(text string) {
+	e.setValue(text, len(text))
+	e.fieldKey = widgets.NewGlobalKey[*widgets.EditableTextState]()
+	e.setModified(false)
+	e.refresh()
+}
 
 // LoadText replaces the text with text loaded from somewhere and marks it as
 // saved, with the caret at the start and the undo history empty.
@@ -549,6 +556,10 @@ func (e *Editor) MenuItems() []widgets.ContextMenuButtonItem {
 	}
 	return e.menuItems(std)
 }
+
+// FieldState returns the state of the text field, for the documentation's
+// pictures and tests; it is false while the editor is not on screen.
+func (e *Editor) FieldState() (*widgets.EditableTextState, bool) { return e.fieldKey.CurrentState() }
 
 // hexColor reads a colour written as #RRGGBB.
 func hexColor(s string) ui.Color {

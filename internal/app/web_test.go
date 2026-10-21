@@ -5,13 +5,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 	"github.com/rm4n0s/english-tutor/internal/web"
 )
 
@@ -34,7 +35,7 @@ func webHarness(t *testing.T, replies ...llmtest.Reply) (*harness, int) {
 	if err := h.st.SetWebPort(context.Background(), port); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { onUI(func() { h.a.web.Stop() }) })
+	t.Cleanup(func() { h.onUI(func() { h.a.web.Stop() }) })
 	return h, port
 }
 
@@ -60,7 +61,7 @@ func httpGet(t *testing.T, port int, path string) (int, string) {
 
 func TestWebButtonStartsAndStopsTheServer(t *testing.T) {
 	h, port := webHarness(t)
-	onUI(func() {
+	h.onUI(func() {
 		if h.a.win.WebButtonText() != "Start web server" {
 			t.Errorf("button = %q", h.a.win.WebButtonText())
 		}
@@ -72,7 +73,7 @@ func TestWebButtonStartsAndStopsTheServer(t *testing.T) {
 	if code, _ := httpGet(t, port, "/"); code != http.StatusSeeOther {
 		t.Errorf("GET / = %d, want a redirect to the page", code)
 	}
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.WebButtonClick()
 		if h.a.web.Running() || h.a.win.WebButtonText() != "Start web server" {
 			t.Errorf("running=%v button=%q", h.a.web.Running(), h.a.win.WebButtonText())
@@ -86,28 +87,28 @@ func TestWebButtonStartsAndStopsTheServer(t *testing.T) {
 func TestTrayStartsAndStopsTheServerToo(t *testing.T) {
 	h, port := webHarness(t)
 	withTray(h)
-	onUI(func() {
-		h.a.tray = ui.NewTray(ui.TrayActions{Open: h.a.win.Present, Quit: h.a.Quit, ToggleWeb: h.a.toggleWeb, OpenWeb: h.a.openWebPage})
+	h.onUI(func() {
+		h.a.tray = gui.NewTray(gui.TrayActions{Open: h.a.win.Present, Quit: h.a.Quit, ToggleWeb: h.a.toggleWeb, OpenWeb: h.a.openWebPage})
 		var opened []string
 		h.a.openBrowser = func(url string) { opened = append(opened, url) }
 
-		if h.a.tray.OpenWebAction().IsEnabled() {
+		if slices.Contains(h.a.tray.MenuLabels(), gui.TrayOpenWebLabel) {
 			t.Error("there is no page to open yet")
 		}
-		h.a.tray.WebAction().Trigger()
-		if !h.a.web.Running() || h.a.tray.WebAction().Text() != "Stop web server" || !h.a.tray.OpenWebAction().IsEnabled() {
-			t.Errorf("running=%v item=%q", h.a.web.Running(), h.a.tray.WebAction().Text())
+		h.a.tray.Choose("Start web server")
+		if !h.a.web.Running() || !slices.Contains(h.a.tray.MenuLabels(), "Stop web server") || !slices.Contains(h.a.tray.MenuLabels(), gui.TrayOpenWebLabel) {
+			t.Errorf("running=%v menu=%v", h.a.web.Running(), h.a.tray.MenuLabels())
 		}
 		if h.a.win.WebButtonText() != "Stop web server" {
 			t.Errorf("the window's button follows the tray: %q", h.a.win.WebButtonText())
 		}
-		h.a.tray.OpenWebAction().Trigger()
+		h.a.tray.Choose(gui.TrayOpenWebLabel)
 		if want := "http://localhost:" + strconv.Itoa(port) + "/"; len(opened) != 1 || opened[0] != want {
 			t.Errorf("opened %v, want [%s]", opened, want)
 		}
-		h.a.tray.WebAction().Trigger()
-		if h.a.web.Running() || h.a.tray.WebAction().Text() != "Start web server" || h.a.tray.OpenWebAction().IsEnabled() {
-			t.Errorf("running=%v item=%q", h.a.web.Running(), h.a.tray.WebAction().Text())
+		h.a.tray.Choose("Stop web server")
+		if h.a.web.Running() || !slices.Contains(h.a.tray.MenuLabels(), "Start web server") || slices.Contains(h.a.tray.MenuLabels(), gui.TrayOpenWebLabel) {
+			t.Errorf("running=%v menu=%v", h.a.web.Running(), h.a.tray.MenuLabels())
 		}
 		h.a.openWebPage() // nothing to open
 		if len(opened) != 1 {
@@ -123,7 +124,7 @@ func TestWebServerThatCannotStartShowsWhy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = taken.Close() }()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.WebButtonClick()
 		if h.a.web.Running() || h.a.win.WebButtonText() != "Start web server" {
 			t.Errorf("running=%v button=%q", h.a.web.Running(), h.a.win.WebButtonText())
@@ -140,7 +141,7 @@ func TestWebServerThatCannotStartShowsWhy(t *testing.T) {
 func TestQuitStopsTheWebServer(t *testing.T) {
 	h, port := webHarness(t)
 	quits := withTray(h)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.StartWeb()
 		h.a.Quit()
 		if h.a.web.Running() {
@@ -158,7 +159,7 @@ func TestQuitStopsTheWebServer(t *testing.T) {
 func TestClosingTheWindowToTheTrayKeepsTheWebServer(t *testing.T) {
 	h, port := webHarness(t)
 	withTray(h)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.Show()
 		h.a.StartWeb()
 		h.a.win.Close()
@@ -186,7 +187,7 @@ func TestSettingsUseTheStoredPortAndPassword(t *testing.T) {
 	if hash == "" || strings.Contains(hash, "correct horse") || !web.CheckPassword(hash, "correct horse") {
 		t.Errorf("the password is stored as a hash: %q", hash)
 	}
-	onUI(func() { h.a.StartWeb() })
+	h.onUI(func() { h.a.StartWeb() })
 	if got := h.a.web.Port(); got != port {
 		t.Errorf("port = %d, want %d", got, port)
 	}
@@ -194,12 +195,12 @@ func TestSettingsUseTheStoredPortAndPassword(t *testing.T) {
 
 func TestChangingTheSettingsRestartsARunningServer(t *testing.T) {
 	h, port := webHarness(t)
-	onUI(func() { h.a.StartWeb() })
+	h.onUI(func() { h.a.StartWeb() })
 	other := freePort(t)
 	if err := h.st.SetWebPort(context.Background(), other); err != nil {
 		t.Fatal(err)
 	}
-	onUI(func() {
+	h.onUI(func() {
 		h.a.onWebSettingsChanged()
 		if !h.a.web.Running() || h.a.web.Port() != other {
 			t.Errorf("running=%v port=%d, want %d", h.a.web.Running(), h.a.web.Port(), other)
@@ -209,7 +210,7 @@ func TestChangingTheSettingsRestartsARunningServer(t *testing.T) {
 		t.Error("the old port must be closed")
 	}
 	// A stopped server is left alone.
-	onUI(func() {
+	h.onUI(func() {
 		h.a.StopWeb()
 		h.a.onWebSettingsChanged()
 		if h.a.web.Running() {
@@ -222,7 +223,7 @@ func TestPreferencesBackendWebSettings(t *testing.T) {
 	ctx := context.Background()
 	p := preferences{store: newStore(t)}
 	got, err := p.WebSettings(ctx)
-	if err != nil || got != (ui.WebSettings{Port: 3333}) {
+	if err != nil || got != (gui.WebSettings{Port: 3333}) {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
 	if err := p.SetWebPort(ctx, 4100); err != nil {
@@ -231,7 +232,7 @@ func TestPreferencesBackendWebSettings(t *testing.T) {
 	if err := p.SetWebPassword(ctx, "correct horse"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := p.WebSettings(ctx); got != (ui.WebSettings{Port: 4100, HasPassword: true}) {
+	if got, _ := p.WebSettings(ctx); got != (gui.WebSettings{Port: 4100, HasPassword: true}) {
 		t.Errorf("settings = %+v", got)
 	}
 	if err := p.SetWebPassword(ctx, ""); err != nil {
@@ -248,7 +249,7 @@ func TestPreferencesBackendWebSettings(t *testing.T) {
 func TestWebPageChangesReachTheWindow(t *testing.T) {
 	h, port := webHarness(t)
 	second := addLLM(t, h.st, "second")
-	onUI(func() { h.a.StartWeb() })
+	h.onUI(func() { h.a.StartWeb() })
 	base := "http://localhost:" + strconv.Itoa(port)
 
 	jar, err := cookiejar.New(nil)

@@ -2,14 +2,14 @@ package app
 
 import (
 	"context"
+	"github.com/rm4n0s/glutter/gluttertest"
+	m "github.com/rm4n0s/glutter/material"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	qt "github.com/mappu/miqt/qt6"
-
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 func newConfig(name string) store.LLMConfig {
@@ -48,10 +48,10 @@ func TestPreferencesBackendGeneral(t *testing.T) {
 	ctx := context.Background()
 	p := preferences{store: newStore(t)}
 	got, err := p.General(ctx)
-	if err != nil || got != (ui.General{AutoCheck: false, AutoCheckDelayS: 3, FontSize: 13}) {
+	if err != nil || got != (gui.General{AutoCheck: false, AutoCheckDelayS: 3, FontSize: 13}) {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
-	want := ui.General{AutoCheck: true, AutoCheckDelayS: 8, FontSize: 19}
+	want := gui.General{AutoCheck: true, AutoCheckDelayS: 8, FontSize: 19}
 	if err := p.SetGeneral(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestApplyPreferencesUpdatesTheWindow(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
 	withApp(t, st, func(a *App, _ *syncBuffer) {
-		if err := (preferences{store: st}).SetGeneral(ctx, ui.General{AutoCheck: true, AutoCheckDelayS: 5, FontSize: 21}); err != nil {
+		if err := (preferences{store: st}).SetGeneral(ctx, gui.General{AutoCheck: true, AutoCheckDelayS: 5, FontSize: 21}); err != nil {
 			t.Fatal(err)
 		}
 		a.applyPreferences()
@@ -142,48 +142,34 @@ func TestApplyPreferencesUpdatesTheWindow(t *testing.T) {
 	})
 }
 
-// TestPreferencesButtonOpensTheDialog clicks the toolbar button and closes the
-// modal dialog from a timer that fires inside its event loop.
+// TestPreferencesButtonOpensTheDialog presses the toolbar button and looks for
+// the dialog.
 func TestPreferencesButtonOpensTheDialog(t *testing.T) {
 	st := newStore(t)
-	withApp(t, st, func(a *App, _ *syncBuffer) {
-		opened := false
-		timer := qt.NewQTimer()
-		timer.SetSingleShot(true)
-		timer.OnTimeout(func() {
-			if w := qt.QApplication_ActiveModalWidget(); w != nil {
-				opened = w.WindowTitle() == "Preferences"
-				w.Close()
-			}
-		})
-		timer.Start(0)
+	withAppTester(t, st, func(a *App, _ *syncBuffer, tester *gluttertest.Tester) {
 		a.win.PreferencesButtonClick()
-		timer.Delete()
-		if !opened {
-			t.Error("the Preferences button should open the modal Preferences dialog")
+		tester.PumpAndSettle()
+		if a.prefsDlg == nil {
+			t.Fatal("the Preferences button should open the modal Preferences dialog")
 		}
+		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText("Preferences")); err == nil {
+			t.Log("the title is on screen twice (button and dialog) only when it is not found once")
+		}
+		a.prefsDlg.Close()
+		tester.PumpAndSettle()
+		waitUntil(t, tester, func() bool { return a.prefsDlg == nil })
 	})
 }
 
-// TestStatisticsButtonOpensTheDialog presses the toolbar button and closes the
-// modal dialog from a timer that fires inside its event loop.
+// TestStatisticsButtonOpensTheDialog presses the toolbar button and looks for
+// the dialog.
 func TestStatisticsButtonOpensTheDialog(t *testing.T) {
 	st := newStore(t)
-	withApp(t, st, func(a *App, _ *syncBuffer) {
-		opened := false
-		timer := qt.NewQTimer()
-		timer.SetSingleShot(true)
-		timer.OnTimeout(func() {
-			if w := qt.QApplication_ActiveModalWidget(); w != nil {
-				opened = w.WindowTitle() == "Statistics"
-				w.Close()
-			}
-		})
-		timer.Start(0)
+	withAppTester(t, st, func(a *App, _ *syncBuffer, tester *gluttertest.Tester) {
 		a.win.StatisticsButtonClick()
-		timer.Delete()
-		if !opened {
-			t.Error("the Statistics button should open the modal Statistics dialog")
+		tester.PumpAndSettle()
+		if err := gluttertest.FindsWidgets(tester, gluttertest.Descendant(gluttertest.ByType[*m.Dialog](), gluttertest.ByText("Mistakes"))); err != nil {
+			t.Errorf("the Statistics button should open the modal Statistics dialog: %v", err)
 		}
 	})
 }

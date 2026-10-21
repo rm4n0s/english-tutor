@@ -4,19 +4,21 @@ import (
 	"context"
 	"fmt"
 	"github.com/rm4n0s/english-tutor/internal/view"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/rm4n0s/glutter/services"
+	"github.com/rm4n0s/glutter/ui"
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // docShotsEnv names the folder TestDocScreenshots writes the pictures of
@@ -73,55 +75,73 @@ func TestDocScreenshots(t *testing.T) {
 
 	h := newHarnessLLM(t, llmtest.New(docCheckReply(), docExplainReply()), "Llama 3.1 (Ollama)")
 	use := func(f *llmtest.Fake) {
-		onUI(func() { h.a.newModel = func(store.LLMConfig) (llms.Model, error) { return f, nil } })
+		h.onUI(func() { h.a.newModel = func(store.LLMConfig) (llms.Model, error) { return f, nil } })
 	}
-	shot := func(name string, widget func() *qt.QWidget) {
+	// shot saves what the window shows now, with the software renderer.
+	shot := func(name string, animated ...bool) {
 		t.Helper()
-		onUI(func() {})
-		time.Sleep(150 * time.Millisecond) // lists and dialogs fill themselves on the event loop
-		onUI(func() {
-			if !widget().Grab().Save(filepath.Join(dir, name)) {
-				t.Errorf("cannot save %s", name)
+		for range 3 { // lists and dialogs fill themselves over a few frames
+			h.tester.FlushPosted()
+			if len(animated) > 0 {
+				h.tester.Pump(100 * time.Millisecond) // a busy indicator never settles
+			} else {
+				h.tester.PumpAndSettle()
 			}
-		})
+		}
+		img := h.tester.Screenshot()
+		f, err := os.Create(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := f.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
+		if err := png.Encode(f, img); err != nil {
+			t.Errorf("cannot save %s: %v", name, err)
+		}
 	}
-	window := func() *qt.QWidget { return h.a.win.Widget() }
 	sentence := "After that, we was tired so we took a taxi to home."
 	start := strings.Index(docText, sentence)
 	end := start + len(sentence)
 
-	onUI(func() {
-		h.a.win.Widget().Resize(1100, 800)
+	h.tester.SetViewSize(ui.Size{Width: 1100, Height: 800})
+	h.onUI(func() {
 		h.a.win.SetFontSize(12)
 		h.a.win.SetSplitterSizes([]int{770, 330, 320, 410}) // room for the whole issues list
 		h.a.win.Show()
 	})
 	h.setText(docText)
-	onUI(func() { h.a.win.MoveCursorTo(0) })
-	shot("01-write.png", window)
+	h.onUI(func() { h.a.win.MoveCursorTo(0) })
+	shot("01-write.png")
 
 	h.checkButton()
 	h.waitIdle()
 	h.waitFor("the mistakes to be recorded", func() bool { return h.events() >= len(docIssues) })
 	h.waitFor("the badges", func() bool { return len(h.a.typeCounts) > 0 })
-	onUI(func() { h.a.win.MoveCursorTo(len(docText)) }) // nothing selected: the cursor is in no issue
-	shot("02-checked.png", window)
+	h.onUI(func() { h.a.win.MoveCursorTo(len(docText)) }) // nothing selected: the cursor is in no issue
+	shot("02-checked.png")
 
 	h.selectIssue(2) // "buyed"
 	h.waitPanel(view.ExplainReady)
 	h.waitFor("the header counts", func() bool { return strings.Contains(h.a.win.ExplanationHeader(), "you have made") })
-	shot("03-explanation.png", window)
+	shot("03-explanation.png")
 
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SelectRange(start, end)
-		if !h.a.win.EditorMenuPicture(filepath.Join(dir, "04-context-menu.png"), "Check") {
-			t.Error("cannot save the menu")
+		if st, ok := h.a.win.Editor().FieldState(); ok {
+			st.ShowToolbar()
+		} else {
+			t.Error("the editor is not on screen")
 		}
 	})
+	shot("04-context-menu.png")
+	h.onUI(func() { h.a.win.FocusEditor(); h.a.win.MoveCursorTo(0) })
 
 	use(llmtest.New(llmtest.Reply{Text: issuesReply(nil), Delay: time.Minute}))
 	h.checkSelection(start, end)
-	shot("05-checking.png", window)
+	shot("05-checking.png", true)
 	h.checkButton() // Cancel
 	h.waitIdle()
 
@@ -133,8 +153,8 @@ func TestDocScreenshots(t *testing.T) {
 	)))
 	h.askAlternatives(start, end)
 	h.waitAlternatives()
-	shot("06-alternatives.png", func() *qt.QWidget { return h.a.altDlg.Dialog().QWidget })
-	onUI(func() { h.a.closeAlternatives() })
+	shot("06-alternatives.png")
+	h.onUI(func() { h.a.closeAlternatives() })
 
 	// Other mistakes the learner made in earlier texts, for the statistics.
 	earlier := []struct {
@@ -161,34 +181,33 @@ func TestDocScreenshots(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var sdlg *ui.StatisticsDialog
-	onUI(func() {
-		sdlg = ui.NewStatisticsDialog(h.a.ctx, h.a.win.Widget(), h.a.stats, ui.StatisticsHooks{})
-		sdlg.Dialog().Resize(760, 620)
-		sdlg.Dialog().Show()
-		sdlg.SelectRow(0)
+	var sdlg *gui.StatisticsDialog
+	h.onUI(func() {
+		sdlg = gui.NewStatisticsDialog(h.a.ctx, h.a.win, h.a.stats, gui.StatisticsHooks{})
+		h.a.win.ShowDialog(sdlg)
 	})
-	shot("07-statistics.png", func() *qt.QWidget { return sdlg.Dialog().QWidget })
-	onUI(func() { sdlg.Dialog().Delete() })
+	h.tester.PumpAndSettle()
+	h.onUI(func() { sdlg.SelectRow(0) })
+	shot("07-statistics.png")
+	h.onUI(sdlg.Close)
+	h.tester.PumpAndSettle()
 
-	var form *ui.LLMForm
-	onUI(func() {
-		form = ui.NewLLMForm(h.a.ctx, h.a.win.Widget(), preferences{store: h.a.store}, store.LLMConfig{
+	h.onUI(func() {
+		form := gui.NewLLMForm(h.a.ctx, h.a.rt, preferences{store: h.a.store}, store.LLMConfig{
 			Name: "Llama 3.1 (Ollama)", Provider: "ollama", Model: "llama3.1", BaseURL: "http://localhost:11434", Temperature: 0.2, NoThinking: true,
-		}, func(*store.LLMConfig) error { return nil })
-		form.Dialog().Show()
+		}, func(*store.LLMConfig) error { return nil }, nil)
+		h.a.win.ShowDialog(form)
 	})
-	shot("09-llm-form.png", func() *qt.QWidget { return form.Dialog().QWidget })
-	onUI(func() { form.Dialog().Delete() })
+	shot("09-llm-form.png")
+	h.tester.SendKeyEvent(services.LogicalKeyboardKeyEscape)
+	h.tester.PumpAndSettle()
 
-	var pdlg *ui.PreferencesDialog
-	onUI(func() {
-		pdlg = ui.NewPreferencesDialog(h.a.ctx, h.a.win.Widget(), preferences{store: h.a.store}, ui.PreferencesHooks{
+	h.onUI(func() {
+		pdlg := gui.NewPreferencesDialog(h.a.ctx, h.a.win, preferences{store: h.a.store}, gui.PreferencesHooks{
 			Changed: func() {}, Failed: func(error) {}, WebToggle: func() {}, WebChanged: func() {},
 			WebState: func() (bool, string) { return false, "" },
 		})
-		pdlg.Dialog().Show()
+		h.a.win.ShowDialog(pdlg)
 	})
-	shot("08-preferences.png", func() *qt.QWidget { return pdlg.Dialog().QWidget })
-	onUI(func() { pdlg.Dialog().Delete() })
+	shot("08-preferences.png")
 }

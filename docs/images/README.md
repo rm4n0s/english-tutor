@@ -5,7 +5,7 @@ The pictures in [TUTORIAL.md](../TUTORIAL.md) are screenshots of the real window
 To make them again after the look of the app changed, from the repository root:
 
 ```
-DOC_SCREENSHOTS_DIR=$PWD/docs/images QT_QPA_PLATFORM=offscreen go test ./internal/app -run TestDocScreenshots
+DOC_SCREENSHOTS_DIR=$PWD/docs/images go test ./internal/app -run TestDocScreenshots
 python3 docs/images/annotate.py
 ```
 

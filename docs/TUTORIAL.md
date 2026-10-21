@@ -137,9 +137,9 @@ The **Check** entry is greyed out when no LLM is configured, and the menu does n
 
 ## 7. Find other ways to write something
 
-A text can be correct and still not sound right. Select a word, a sentence or a paragraph (up to about 600 words), right-click and choose **Alternative**. A window opens at once and lists other ways to write the same thing:
+A text can be correct and still not sound right. Select a word, a sentence or a paragraph (up to about 600 words), right-click and choose **Alternative**. A panel opens at once and lists other ways to write the same thing:
 
-![The Alternatives window](images/06-alternatives.png)
+![The Alternatives panel](images/06-alternatives.png)
 
 - **Double-click** an alternative to put it in your text in place of the selection. The window closes. If you change your mind, `Ctrl+Z` brings your words back.
 - **Copy** puts the highlighted alternative on the clipboard instead.

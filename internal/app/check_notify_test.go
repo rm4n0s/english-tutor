@@ -15,7 +15,7 @@ type notice struct{ title, text string }
 // window asked for attention.
 func (h *harness) notices(active bool) *[]notice {
 	got := new([]notice)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.windowActive = func() bool { return active }
 		h.a.notifier = func(title, text string) { *got = append(*got, notice{title, text}) }
 	})
@@ -42,7 +42,7 @@ func TestCheckEndNotifiesWhenTheUserIsElsewhere(t *testing.T) {
 			got := h.notices(tt.active)
 			h.setText(sample)
 			if tt.auto {
-				onUI(func() { h.a.startCheck(false) })
+				h.onUI(func() { h.a.startCheck(false) })
 			} else {
 				h.checkButton()
 			}
@@ -67,7 +67,7 @@ func TestCancelledCheckDoesNotNotify(t *testing.T) {
 	h.checkButton()
 	// Cancel only once the request is out; before that there is nothing to cancel.
 	h.waitFor("the request", func() bool { return len(fake.Calls()) > 0 })
-	onUI(func() { h.a.analyzer.Cancel() })
+	h.onUI(func() { h.a.analyzer.Cancel() })
 	h.waitIdle()
 	if len(*got) != 0 {
 		t.Errorf("a check the user cancelled must not notify, got %+v", *got)

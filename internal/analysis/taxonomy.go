@@ -1,6 +1,6 @@
 // Package analysis holds the prompts, the response contract, the error type
 // taxonomy and (in later files) issue locating and chunking. It does not import
-// miqt, so it can be tested without a display.
+// a GUI toolkit, so it can be tested without a display.
 package analysis
 
 import "strings"

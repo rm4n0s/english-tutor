@@ -1,5 +1,5 @@
 // Package llm builds langchaingo models from the user's configuration and
-// normalises token usage. It does not import miqt.
+// normalises token usage. It does not import a GUI toolkit.
 package llm
 
 import (

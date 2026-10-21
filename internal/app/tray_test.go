@@ -3,16 +3,16 @@ package app
 import (
 	"testing"
 
-	"github.com/rm4n0s/english-tutor/internal/ui"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 )
 
 // withTray gives the harness a tray icon and a Quit that only counts, because
 // the real one would stop the event loop the tests run on.
 func withTray(h *harness) *int {
 	quits := new(int)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.quit = func() { *quits++ }
-		h.a.tray = ui.NewTray(ui.TrayActions{Open: h.a.win.Present, Quit: h.a.Quit})
+		h.a.tray = gui.NewTray(gui.TrayActions{Open: h.a.win.Present, Quit: h.a.Quit})
 	})
 	return quits
 }
@@ -21,7 +21,7 @@ func TestClosingTheWindowWithATrayOnlyHidesIt(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	quits := withTray(h)
 	h.typed("draft")
-	onUI(func() {
+	h.onUI(func() {
 		h.a.Show()
 		h.a.win.Close()
 		if h.a.win.Visible() {
@@ -33,7 +33,7 @@ func TestClosingTheWindowWithATrayOnlyHidesIt(t *testing.T) {
 		if !h.a.win.Modified() || h.a.win.Text() != "draft" {
 			t.Errorf("the text must stay as it was: %q modified=%v", h.a.win.Text(), h.a.win.Modified())
 		}
-		h.a.tray.OpenAction().Trigger()
+		h.a.tray.Choose(gui.TrayOpenLabel)
 		if !h.a.win.Visible() || h.a.win.Text() != "draft" {
 			t.Errorf("Open must bring the same window back: visible=%v text=%q", h.a.win.Visible(), h.a.win.Text())
 		}
@@ -46,7 +46,7 @@ func TestClosingTheWindowWithATrayOnlyHidesIt(t *testing.T) {
 func TestClosingTheWindowWithATraySavesItsState(t *testing.T) {
 	h, _ := newSavingHarness(t)
 	withTray(h)
-	onUI(func() {
+	h.onUI(func() {
 		h.a.Show()
 		h.a.win.Close()
 	})
@@ -59,7 +59,7 @@ func TestClosingTheWindowWithoutATrayStillQuits(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.unsaved = UnsavedCancel
 	h.typed("draft")
-	onUI(func() {
+	h.onUI(func() {
 		h.a.Show()
 		h.a.win.Close()
 		if !h.a.win.Visible() || len(fd.unsavedAsked) != 1 {
@@ -89,10 +89,10 @@ func TestTrayCloseQuits(t *testing.T) {
 			if tt.text != "" {
 				h.typed(tt.text)
 			}
-			onUI(func() {
+			h.onUI(func() {
 				h.a.Show()
 				h.a.win.Close() // hidden in the tray
-				h.a.tray.CloseAction().Trigger()
+				h.a.tray.Choose(gui.TrayCloseLabel)
 				if len(fd.unsavedAsked) != tt.asks {
 					t.Errorf("unsaved questions = %v, want %d", fd.unsavedAsked, tt.asks)
 				}
@@ -112,7 +112,7 @@ func TestTrayCloseSavesBeforeQuitting(t *testing.T) {
 	fd.unsaved, fd.savePath, fd.saveOK = UnsavedSave, t.TempDir()+"/out.txt", true
 	quits := withTray(h)
 	h.typed("draft")
-	onUI(func() { h.a.tray.CloseAction().Trigger() })
+	h.onUI(func() { h.a.tray.Choose(gui.TrayCloseLabel) })
 	if *quits != 1 || len(fd.saveSuggestions) != 1 {
 		t.Errorf("quits %d, save dialogs %v; Save writes the text and then quits", *quits, fd.saveSuggestions)
 	}
@@ -121,13 +121,15 @@ func TestTrayCloseSavesBeforeQuitting(t *testing.T) {
 	}
 }
 
-func TestEnableTrayWithoutASystemTray(t *testing.T) {
+func TestEnableTrayThenNoSystemTray(t *testing.T) {
 	h, _ := newSavingHarness(t)
-	onUI(func() {
-		if ui.TrayAvailable() {
-			t.Skip("this platform has a system tray")
+	h.onUI(func() {
+		if !h.a.EnableTray() || h.a.tray == nil {
+			t.Fatal("the application asks for a tray icon")
 		}
-		if h.a.EnableTray() || h.a.tray != nil {
+		// The desktop turns out to show none: closing the window quits again.
+		h.a.TrayUnavailable()
+		if h.a.tray != nil {
 			t.Error("without a system tray the application must not hide its window")
 		}
 	})

@@ -1,50 +1,75 @@
 package app
 
 import (
+	"strconv"
 	"testing"
+	"time"
 
-	qt "github.com/mappu/miqt/qt6"
+	"github.com/rm4n0s/glutter/gluttertest"
+	"github.com/rm4n0s/glutter/services"
 
 	"github.com/rm4n0s/english-tutor/internal/store"
 )
 
-// closeModalSoon closes the next modal dialog that opens, the way a user who
-// presses Escape would. The dialogs under test are modal and block in their own
-// event loop, so something must end them from inside it.
-func closeModalSoon() (stop func()) {
-	timer := qt.NewQTimer()
-	timer.OnTimeout(func() {
-		if w := qt.QApplication_ActiveModalWidget(); w != nil {
-			timer.Stop()
-			w.Close()
-		}
-	})
-	timer.Start(5)
-	return func() { timer.Stop(); timer.Delete() }
-}
-
-func TestQtDialogsCanBeDismissed(t *testing.T) {
+// TestWindowDialogsReportCancelWhenDismissed opens each question the saving code
+// asks and closes it without answering, as pressing Escape would. Closing a
+// dialog must not count as confirming it.
+func TestWindowDialogsReportCancelWhenDismissed(t *testing.T) {
 	st := newStore(t)
-	withApp(t, st, func(a *App, _ *syncBuffer) {
-		d := qtDialogs{a: a}
+	withAppTester(t, st, func(a *App, _ *syncBuffer, tester *gluttertest.Tester) {
+		d := windowDialogs{a: a}
+		var answered []string
 		tests := []struct {
 			name string
-			run  func() bool // reports whether the dialog said "go ahead"
+			ask  func()
 		}{
-			{"open file", func() bool { _, ok := d.ChooseOpenFile(); return ok }},
-			{"save file", func() bool { _, ok := d.ChooseSaveFile("essay.txt"); return ok }},
-			{"document title", func() bool { _, ok := d.AskDocumentTitle("Title"); return ok }},
-			{"library", func() bool { _, ok := d.ChooseDocument(); return ok }},
-			{"unsaved changes", func() bool { return d.AskUnsaved("essay.txt") != UnsavedCancel }},
+			{"document title", func() {
+				d.AskDocumentTitle("Title", func(_ string, ok bool) { answered = append(answered, strconv.FormatBool(ok)) })
+			}},
+			{"library", func() {
+				d.ChooseDocument(func(_ uint, ok bool) { answered = append(answered, strconv.FormatBool(ok)) })
+			}},
+			{"unsaved changes", func() {
+				d.AskUnsaved("essay.txt", func(c UnsavedChoice) { answered = append(answered, strconv.Itoa(int(c))) })
+			}},
 		}
-		for _, tt := range tests {
-			stop := closeModalSoon()
-			if tt.run() {
-				t.Errorf("%s: closing the dialog must not count as confirming it", tt.name)
+		want := []string{"false", "false", strconv.Itoa(int(UnsavedCancel))}
+		for i, tt := range tests {
+			tt.ask()
+			tester.PumpAndSettle()
+			if err := dismissTop(tester); err != nil {
+				t.Fatalf("%s: %v", tt.name, err)
 			}
-			stop()
+			waitUntil(t, tester, func() bool { return len(answered) == i+1 })
+			if answered[i] != want[i] {
+				t.Errorf("%s: answered %s, want %s", tt.name, answered[i], want[i])
+			}
 		}
 	})
+}
+
+// dismissTop closes the dialog that is on top of the window, the way Escape
+// does.
+func dismissTop(tester *gluttertest.Tester) error {
+	tester.SendKeyEvent(services.LogicalKeyboardKeyEscape)
+	tester.PumpAndSettle()
+	return nil
+}
+
+// waitUntil pumps the app until cond holds, giving goroutines up to five seconds
+// to post their results.
+func waitUntil(t *testing.T, tester *gluttertest.Tester, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		tester.FlushPosted()
+		tester.Pump()
+		if cond() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting")
 }
 
 func TestLibraryBackend(t *testing.T) {

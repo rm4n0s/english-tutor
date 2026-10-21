@@ -1,4 +1,4 @@
-// Package app ties the store, the analysis services and the Qt window together.
+// Package app ties the store, the analysis services and the window together.
 package app
 
 import (
@@ -9,16 +9,15 @@ import (
 	"sync"
 	"time"
 
-	qt "github.com/mappu/miqt/qt6"
-	"github.com/mappu/miqt/qt6/mainthread"
+	"github.com/rm4n0s/glutter/widgets"
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 	"github.com/rm4n0s/english-tutor/internal/web"
 )
 
@@ -38,7 +37,8 @@ type App struct {
 	analyzer  *analysis.Analyzer
 	explainer *analysis.Explainer
 	suggester *analysis.Suggester
-	win       *ui.MainWindow
+	rt        *gui.Runtime
+	win       *gui.MainWindow
 	state     *issues.State
 
 	// web is the web server (section 4.7). It runs only while the user wants it
@@ -46,13 +46,13 @@ type App struct {
 	web *web.Server
 	// prefsDlg is the open Preferences dialog, if any, so that it follows the
 	// web server when the tray starts or stops it.
-	prefsDlg *ui.PreferencesDialog
+	prefsDlg *gui.PreferencesDialog
 	// openBrowser opens an address in the browser; tests replace it.
 	openBrowser func(url string)
 
 	// tray is the system tray icon, nil when the application has none. With a
 	// tray, closing the window only hides it; the tray's Close item quits.
-	tray *ui.Tray
+	tray *gui.Tray
 	// notifier shows a desktop message and windowActive says whether the user is
 	// in the window. Tests replace them.
 	notifier     func(title, text string)
@@ -80,21 +80,21 @@ type App struct {
 
 	autoCheck bool
 	autoDelay time.Duration
-	autoTimer *qt.QTimer
+	autoTimer *timer
 
 	// Explanation panel and issues list (UI thread only).
 	explainSeq     uint64 // number of the latest explanation started
 	explainBuf     strings.Builder
 	explainDirty   bool
 	explainHeader  string
-	renderTimer    *qt.QTimer
+	renderTimer    *timer
 	resultRecorded bool           // the issues of the current result are in the statistics
 	typeCounts     map[string]int // all-time mistakes per error type, for the row badges
 	lastCheckID    uint64
 
 	// The Alternatives window that is open, if any, and the number of the latest
 	// request made for it (UI thread only).
-	altDlg *ui.AlternativesDialog
+	altDlg *gui.AlternativesDialog
 	altSeq uint64
 
 	// bgN counts the goroutines started by goBackground. A mutex and a
@@ -110,7 +110,9 @@ type App struct {
 // still starts.
 func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 	stats := store.NewStats(st, nil)
+	rt := gui.NewRuntime(nil)
 	a := &App{
+		rt:         rt,
 		ctx:        ctx,
 		log:        log,
 		store:      st,
@@ -119,18 +121,16 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		explainer:  analysis.NewExplainer(analysis.ExplainerConfig{Usage: stats, Logger: log}),
 		suggester:  analysis.NewSuggester(analysis.SuggesterConfig{Usage: stats, Logger: log}),
 		typeCounts: map[string]int{},
-		win:        ui.NewMainWindow(),
+		win:        gui.NewMainWindow(rt),
 		state:      issues.New(),
 		sourceKey:  newSessionKey(),
 		newModel: func(cfg store.LLMConfig) (llms.Model, error) {
 			return llm.New(cfg.ModelConfig())
 		},
 		autoDelay: store.DefaultAutoCheckSec * time.Second,
-		quit:      qt.QCoreApplication_Quit,
-		openBrowser: func(url string) {
-			qt.QDesktopServices_OpenUrl(qt.NewQUrl3(url))
-		},
 	}
+	a.quit = a.win.Exit
+	a.openBrowser = a.win.OpenURL
 	a.web = web.New(ctx, web.Deps{
 		Log:   log,
 		Store: st,
@@ -138,20 +138,16 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		// Read when it is called, so that a test can replace a.newModel.
 		NewModel: func(cfg store.LLMConfig) (llms.Model, error) { return a.newModel(cfg) },
 		// The web page changed the LLM list or a setting: the window reloads them.
-		SettingsChanged: func() { mainthread.Start(a.applyPreferences) },
+		SettingsChanged: func() { a.rt.Post(a.applyPreferences) },
 	})
 	a.notifier = a.trayNotify
 	a.windowActive = a.win.IsActive
-	a.autoTimer = qt.NewQTimer()
-	a.autoTimer.SetSingleShot(true)
-	a.autoTimer.OnTimeout(a.onAutoCheckTimer)
-	a.dialogs = qtDialogs{a: a}
+	a.autoTimer = newTimer(rt, a.onAutoCheckTimer)
+	a.dialogs = windowDialogs{a: a}
 	a.bgCond = sync.NewCond(&a.bgMu)
-	a.renderTimer = qt.NewQTimer()
-	a.renderTimer.SetSingleShot(true)
-	a.renderTimer.OnTimeout(a.onRenderTimer)
+	a.renderTimer = newTimer(rt, a.onRenderTimer)
 	a.state.Subscribe(a.onStateChange)
-	a.win.SetHandlers(ui.Handlers{
+	a.win.SetHandlers(gui.Handlers{
 		Check:            func() { a.startCheck(true) },
 		Cancel:           a.analyzer.Cancel,
 		Preferences:      a.openPreferences,
@@ -161,7 +157,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		SaveAs:           a.onSaveAs,
 		SaveToLibrary:    a.onSaveToLibrary,
 		Library:          a.onLibrary,
-		CanClose:         a.canClose,
+		CloseRequested:   a.onCloseRequested,
 		ModifiedChanged:  func(bool) { a.updateTitle() },
 		Statistics:       a.openStatistics,
 		WebToggle:        a.toggleWeb,
@@ -183,7 +179,6 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 		ExplainCancel:  a.explainer.Cancel,
 		NextIssue:      func() { a.stepIssue(a.state.Next) },
 		PrevIssue:      func() { a.stepIssue(a.state.Prev) },
-		Closed:         a.onClosed,
 	})
 	a.loadState()
 	a.refreshStatus()
@@ -193,7 +188,7 @@ func New(ctx context.Context, log *slog.Logger, st *store.Store) *App {
 }
 
 // goBackground runs f in a goroutine that Wait waits for. Goroutines must not
-// touch Qt; they post their result to the UI thread with mainthread.Start.
+// touch the window; they post their result to the UI thread with rt.Post.
 func (a *App) goBackground(f func()) {
 	a.bgMu.Lock()
 	a.bgN++
@@ -228,7 +223,7 @@ func (a *App) Wait() {
 func (a *App) Show() { a.win.Show() }
 
 // Window returns the main window.
-func (a *App) Window() *ui.MainWindow { return a.win }
+func (a *App) Window() *gui.MainWindow { return a.win }
 
 func (a *App) loadState() {
 	a.reloadLLMs()
@@ -259,9 +254,9 @@ func (a *App) reloadLLMs() {
 	if err != nil {
 		logging.LogError(a.log, "reading LLM list", err)
 	}
-	choices := make([]ui.LLMChoice, len(cfgs))
+	choices := make([]gui.LLMChoice, len(cfgs))
 	for i, c := range cfgs {
-		choices[i] = ui.LLMChoice{ID: c.ID, Name: c.Name}
+		choices[i] = gui.LLMChoice{ID: c.ID, Name: c.Name}
 	}
 	selected, err := a.store.SelectedLLMID(a.ctx)
 	if err != nil {
@@ -302,14 +297,32 @@ func (a *App) loadAutoCheck() {
 	a.setAutoCheck(on)
 }
 
-// onClosed runs when the window is closed. With a tray icon the window is only
-// hidden and the application, with any check that is running, goes on; without
-// one the application is about to end, so its work stops.
-func (a *App) onClosed() {
-	if a.tray == nil {
-		a.stopWork()
+// onCloseRequested is the close button of the window. With a tray icon the
+// window is only hidden and the application, with any check that is running,
+// goes on; the tray's Close item quits. Without one, closing the window ends the
+// application, after the question about unsaved changes.
+func (a *App) onCloseRequested() {
+	if a.tray != nil {
+		a.saveWindowState()
+		a.win.Hide()
+		return
 	}
+	a.confirmDiscard(func(ok bool) {
+		if ok {
+			a.finish()
+		}
+	})
+}
+
+// finish ends the application: what is running stops, the window state is saved
+// and the event loop ends.
+func (a *App) finish() {
+	a.stopWork()
 	a.saveWindowState()
+	if a.tray != nil {
+		a.tray.Hide()
+	}
+	a.quit()
 }
 
 // stopWork cancels what is running and stops the timers and the web server.
@@ -323,22 +336,36 @@ func (a *App) stopWork() {
 }
 
 // EnableTray puts the application in the system tray, so that closing the window
-// hides it instead of quitting. It returns false, and changes nothing, when the
-// desktop has no system tray: the window then closes the application as before.
+// hides it instead of quitting. The desktop may turn out to have no system tray;
+// the application then behaves as if it had never asked for one (see Root).
 func (a *App) EnableTray() bool {
-	if !ui.TrayAvailable() {
-		return false
-	}
-	a.tray = ui.NewTray(ui.TrayActions{
+	tray := gui.NewTray(gui.TrayActions{
 		Open:      a.win.Present,
 		Quit:      a.Quit,
 		ToggleWeb: a.toggleWeb,
 		OpenWeb:   a.openWebPage,
 	})
-	a.tray.SetWebRunning(a.web.Running())
-	a.tray.Show()
-	qt.QGuiApplication_SetQuitOnLastWindowClosed(false)
+	if !tray.Available() {
+		return false
+	}
+	a.tray = tray
+	tray.SetUnavailableHandler(func() {
+		a.log.Info("no system tray available, closing the window quits the application")
+		a.tray = nil
+	})
+	tray.SetWebRunning(a.web.Running())
+	tray.Show()
 	return true
+}
+
+// Root is the widget to run: the main window in its app, with the tray.
+func (a *App) Root() widgets.Widget { return gui.Root(a.win, a.tray, a.rt) }
+
+// TrayUnavailable tells the application that the desktop shows no tray icon.
+func (a *App) TrayUnavailable() {
+	if a.tray != nil {
+		a.tray.MarkUnavailable()
+	}
 }
 
 // Quit ends the application (the tray's Close item). Unsaved changes are asked
@@ -348,15 +375,11 @@ func (a *App) Quit() {
 	if a.win.Modified() {
 		a.win.Present()
 	}
-	if !a.confirmDiscard() {
-		return
-	}
-	a.stopWork()
-	a.saveWindowState()
-	if a.tray != nil {
-		a.tray.Hide()
-	}
-	a.quit()
+	a.confirmDiscard(func(ok bool) {
+		if ok {
+			a.finish()
+		}
+	})
 }
 
 func (a *App) saveWindowState() {

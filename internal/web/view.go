@@ -12,10 +12,10 @@ import (
 	"unicode/utf16"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/gui"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 //go:embed templates/*.html
@@ -363,7 +363,7 @@ func providerHints(p string) (placeholder, note string) {
 func (w *workspace) prefsData(pv *prefsView) *prefsData {
 	d := &prefsData{prefsView: pv, IsGeneral: pv.Tab == "general"}
 	if f := pv.Edit; f != nil {
-		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote, NoThinkingNote: ui.NoThinkingNote,
+		fd := &llmFormData{llmForm: f, Title: "Edit LLM", KeyDisabled: f.ollama(), APIKeyNote: apiKeyNote, NoThinkingNote: gui.NoThinkingNote,
 			NoThinkingDisabled: !llm.SupportsNoThinking(llm.Provider(f.Provider)),
 			MinTimeout:         store.MinTimeoutSeconds, MaxTimeout: store.MaxTimeoutSeconds, MaxParallel: store.MaxParallelLimit}
 		if f.ID == 0 {

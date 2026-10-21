@@ -31,27 +31,27 @@ type fakeDialogs struct {
 	docOK            bool
 }
 
-func (f *fakeDialogs) ChooseOpenFile() (string, bool) { return f.openPath, f.openOK }
-func (f *fakeDialogs) ChooseSaveFile(suggested string) (string, bool) {
+func (f *fakeDialogs) ChooseOpenFile(done func(string, bool)) { done(f.openPath, f.openOK) }
+func (f *fakeDialogs) ChooseSaveFile(suggested string, done func(string, bool)) {
 	f.saveSuggestions = append(f.saveSuggestions, suggested)
-	return f.savePath, f.saveOK
+	done(f.savePath, f.saveOK)
 }
-func (f *fakeDialogs) AskUnsaved(name string) UnsavedChoice {
+func (f *fakeDialogs) AskUnsaved(name string, done func(UnsavedChoice)) {
 	f.unsavedAsked = append(f.unsavedAsked, name)
-	return f.unsaved
+	done(f.unsaved)
 }
-func (f *fakeDialogs) AskDocumentTitle(suggested string) (string, bool) {
+func (f *fakeDialogs) AskDocumentTitle(suggested string, done func(string, bool)) {
 	f.titleSuggestions = append(f.titleSuggestions, suggested)
-	return f.title, f.titleOK
+	done(f.title, f.titleOK)
 }
-func (f *fakeDialogs) ChooseDocument() (uint, bool) { return f.docID, f.docOK }
+func (f *fakeDialogs) ChooseDocument(done func(uint, bool)) { done(f.docID, f.docOK) }
 
 // savingHarness is a harness whose dialogs are scripted.
 func newSavingHarness(t *testing.T, replies ...llmtest.Reply) (*harness, *fakeDialogs) {
 	t.Helper()
 	h := newHarness(t, llmtest.New(replies...))
 	fd := &fakeDialogs{}
-	onUI(func() { h.a.dialogs = fd })
+	h.onUI(func() { h.a.dialogs = fd })
 	return h, fd
 }
 
@@ -59,24 +59,24 @@ func newSavingHarness(t *testing.T, replies ...llmtest.Reply) (*harness, *fakeDi
 // reset the modified flag, typing sets it.
 func (h *harness) typed(text string) {
 	h.t.Helper()
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.SetText(text)
 		h.a.win.SetModified(true)
 	})
 }
 
 func (h *harness) text() (s string) {
-	onUI(func() { s = h.a.win.Text() })
+	h.onUI(func() { s = h.a.win.Text() })
 	return s
 }
 
 func (h *harness) title() (s string) {
-	onUI(func() { s = h.a.win.Widget().WindowTitle() })
+	h.onUI(func() { s = h.a.win.Title() })
 	return s
 }
 
 func (h *harness) modified() (m bool) {
-	onUI(func() { m = h.a.win.Modified() })
+	h.onUI(func() { m = h.a.win.Modified() })
 	return m
 }
 
@@ -129,14 +129,14 @@ func TestNewClearsEverything(t *testing.T) {
 	h, fd := newSavingHarness(t, twoIssues())
 	h.checked(nil)
 	var oldKey string
-	onUI(func() {
+	h.onUI(func() {
 		oldKey = h.a.sourceKey
 		h.a.win.SetModified(true) // as if the user had edited the checked text
 	})
 	fd.unsaved = UnsavedDiscard
 
-	onUI(func() { h.a.onNew() })
-	onUI(func() {
+	h.onUI(func() { h.a.onNew() })
+	h.onUI(func() {
 		if h.a.win.Text() != "" || h.a.win.Modified() || len(h.a.state.Items()) != 0 || h.a.state.Phase() != issues.NotChecked {
 			t.Errorf("text %q modified %v items %d phase %v", h.a.win.Text(), h.a.win.Modified(), len(h.a.state.Items()), h.a.state.Phase())
 		}
@@ -157,7 +157,7 @@ func TestNewClearsEverything(t *testing.T) {
 
 func TestNewAsksOnlyWhenThereAreUnsavedChanges(t *testing.T) {
 	h, fd := newSavingHarness(t)
-	onUI(func() { h.a.onNew() })
+	h.onUI(func() { h.a.onNew() })
 	if len(fd.unsavedAsked) != 0 {
 		t.Errorf("asked %v about an untouched text", fd.unsavedAsked)
 	}
@@ -182,7 +182,7 @@ func TestUnsavedChoices(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "draft.txt")
 			fd.unsaved, fd.savePath, fd.saveOK = tt.choice, path, true
 			h.typed("my draft")
-			onUI(func() { h.a.onNew() })
+			h.onUI(func() { h.a.onNew() })
 			if got := h.text(); got != tt.wantText {
 				t.Errorf("text = %q, want %q", got, tt.wantText)
 			}
@@ -201,7 +201,7 @@ func TestSavingBeforeNewStaysIfTheSaveIsCancelled(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.unsaved, fd.saveOK = UnsavedSave, false // the user changes their mind in the file dialog
 	h.typed("precious")
-	onUI(func() { h.a.onNew() })
+	h.onUI(func() { h.a.onNew() })
 	if h.text() != "precious" {
 		t.Error("the text must stay when the save is cancelled")
 	}
@@ -212,17 +212,17 @@ func TestOpenLoadsAFile(t *testing.T) {
 	path := writeFile(t, "essay.txt", []byte("My essay.\r\nSecond line."))
 	fd.openPath, fd.openOK = path, true
 	var oldKey string
-	onUI(func() { oldKey = h.a.sourceKey })
+	h.onUI(func() { oldKey = h.a.sourceKey })
 
-	onUI(func() { h.a.onOpen() })
-	onUI(func() {
+	h.onUI(func() { h.a.onOpen() })
+	h.onUI(func() {
 		if h.a.win.Text() != "My essay.\nSecond line." || h.a.win.Modified() {
 			t.Errorf("text %q modified %v", h.a.win.Text(), h.a.win.Modified())
 		}
 		if h.a.sourceKey != "file:"+path || h.a.sourceKey == oldKey {
 			t.Errorf("source = %q, want file:%s", h.a.sourceKey, path)
 		}
-		if got := h.a.win.Widget().WindowTitle(); got != "essay.txt — English Tutor" {
+		if got := h.a.win.Title(); got != "essay.txt — English Tutor" {
 			t.Errorf("title = %q", got)
 		}
 		if h.a.win.CursorPosition() != 0 {
@@ -235,8 +235,8 @@ func TestOpenedFileIsSavedWithItsOwnLineEnding(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	path := writeFile(t, "w.txt", []byte("one\r\ntwo\r\n"))
 	fd.openPath, fd.openOK = path, true
-	onUI(func() { h.a.onOpen() })
-	onUI(func() { h.a.win.InsertTextAt(0, "zero\n"); h.a.onSave() })
+	h.onUI(func() { h.a.onOpen() })
+	h.onUI(func() { h.a.win.InsertTextAt(0, "zero\n"); h.a.onSave() })
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != "zero\r\none\r\ntwo\r\n" {
 		t.Errorf("file = %q, %v", got, err)
@@ -261,8 +261,8 @@ func TestOpenFailuresKeepTheCurrentText(t *testing.T) {
 			fd.openPath, fd.openOK = tt.path(t), true
 			fd.unsaved = UnsavedCancel
 			h.typed("unsaved work")
-			onUI(func() { h.a.onOpen() })
-			onUI(func() {
+			h.onUI(func() { h.a.onOpen() })
+			h.onUI(func() {
 				if h.a.win.Text() != "unsaved work" || !h.a.win.Modified() {
 					t.Error("a file that cannot be opened must not replace the text")
 				}
@@ -284,7 +284,7 @@ func TestOpenCancelledChangesNothing(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.openOK = false
 	h.typed("work")
-	onUI(func() { h.a.onOpen() })
+	h.onUI(func() { h.a.onOpen() })
 	if h.text() != "work" || len(fd.unsavedAsked) != 0 {
 		t.Error("cancelling the file dialog changes nothing and asks nothing")
 	}
@@ -295,12 +295,12 @@ func TestOpenAsksAboutUnsavedChangesAfterTheFileIsRead(t *testing.T) {
 	fd.openPath, fd.openOK = writeFile(t, "a.txt", []byte("from file")), true
 	fd.unsaved = UnsavedCancel
 	h.typed("work")
-	onUI(func() { h.a.onOpen() })
+	h.onUI(func() { h.a.onOpen() })
 	if h.text() != "work" || len(fd.unsavedAsked) != 1 {
 		t.Errorf("text %q, asked %v", h.text(), fd.unsavedAsked)
 	}
 	fd.unsaved = UnsavedDiscard
-	onUI(func() { h.a.onOpen() })
+	h.onUI(func() { h.a.onOpen() })
 	if h.text() != "from file" {
 		t.Errorf("text = %q", h.text())
 	}
@@ -311,7 +311,7 @@ func TestSaveWithoutAFileBehavesLikeSaveAs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "essay.md")
 	fd.savePath, fd.saveOK = path, true
 	h.typed("My holiday\nWe went to the sea.")
-	onUI(func() { h.a.onSave() })
+	h.onUI(func() { h.a.onSave() })
 
 	if got, err := os.ReadFile(path); err != nil || string(got) != "My holiday\nWe went to the sea." {
 		t.Errorf("file = %q, %v", got, err)
@@ -324,8 +324,8 @@ func TestSaveWithoutAFileBehavesLikeSaveAs(t *testing.T) {
 	}
 
 	// A second Save writes to the same file without asking.
-	onUI(func() { h.a.win.InsertTextAt(0, "# ") })
-	onUI(func() { h.a.onSave() })
+	h.onUI(func() { h.a.win.InsertTextAt(0, "# ") })
+	h.onUI(func() { h.a.onSave() })
 	if len(fd.saveSuggestions) != 1 {
 		t.Error("Save must not ask for a file again")
 	}
@@ -339,7 +339,7 @@ func TestSaveAsAddsAnExtension(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "noextension")
 	fd.savePath, fd.saveOK = base, true
 	h.typed("text")
-	onUI(func() { h.a.onSaveAs() })
+	h.onUI(func() { h.a.onSaveAs() })
 	if got, err := os.ReadFile(base + ".txt"); err != nil || string(got) != "text" {
 		t.Errorf("file = %q, %v", got, err)
 	}
@@ -349,7 +349,7 @@ func TestSaveAsCancelledChangesNothing(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.saveOK = false
 	h.typed("text")
-	onUI(func() { h.a.onSaveAs() })
+	h.onUI(func() { h.a.onSaveAs() })
 	if !h.modified() || h.title() != "Untitled* — English Tutor" {
 		t.Errorf("modified %v, title %q", h.modified(), h.title())
 	}
@@ -359,7 +359,7 @@ func TestSaveFailureShowsABannerAndKeepsTheTextModified(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.savePath, fd.saveOK = filepath.Join(t.TempDir(), "missing-folder", "a.txt"), true
 	h.typed("text")
-	onUI(func() {
+	h.onUI(func() {
 		h.a.onSaveAs()
 		if !h.a.win.Modified() || !strings.Contains(h.a.win.ErrorText(), "could not be saved") {
 			t.Errorf("modified %v, banner %q", h.a.win.Modified(), h.a.win.ErrorText())
@@ -374,13 +374,13 @@ func TestSaveAsMovesTheRecordedMistakes(t *testing.T) {
 	h, fd := newSavingHarness(t, twoIssues())
 	h.checked(nil)
 	var sessionKey string
-	onUI(func() { sessionKey = h.a.sourceKey })
+	h.onUI(func() { sessionKey = h.a.sourceKey })
 	path := filepath.Join(t.TempDir(), "essay.txt")
 	fd.savePath, fd.saveOK = path, true
 
-	onUI(func() { h.a.onSaveAs() })
+	h.onUI(func() { h.a.onSaveAs() })
 	var fileKey string
-	onUI(func() { fileKey = h.a.sourceKey })
+	h.onUI(func() { fileKey = h.a.sourceKey })
 	if fileKey != "file:"+path {
 		t.Fatalf("source = %q", fileKey)
 	}
@@ -390,7 +390,7 @@ func TestSaveAsMovesTheRecordedMistakes(t *testing.T) {
 	// The events are now under the file's key: removing one by that key works,
 	// and the old key has none.
 	fingerprint := ""
-	onUI(func() { fingerprint = h.a.state.Items()[0].Fingerprint })
+	h.onUI(func() { fingerprint = h.a.state.Items()[0].Fingerprint })
 	if err := h.a.stats.NotAnError(context.Background(), sessionKey, fingerprint); err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestSaveToLibraryCreatesADocument(t *testing.T) {
 	h, fd := newSavingHarness(t, twoIssues())
 	h.checked(nil)
 	fd.title, fd.titleOK = "Holiday essay", true
-	onUI(func() { h.a.onSaveToLibrary() })
+	h.onUI(func() { h.a.onSaveToLibrary() })
 
 	docs, err := h.st.ListDocuments(context.Background())
 	if err != nil || len(docs) != 1 || docs[0].Title != "Holiday essay" || docs[0].Content != sample {
@@ -418,11 +418,11 @@ func TestSaveToLibraryCreatesADocument(t *testing.T) {
 	if len(fd.titleSuggestions) != 1 || fd.titleSuggestions[0] != "He go home. She have a cat." {
 		t.Errorf("suggested title = %v, want the first line", fd.titleSuggestions)
 	}
-	onUI(func() {
+	h.onUI(func() {
 		if h.a.sourceKey != "doc:"+itoa(docs[0].ID) || h.a.win.Modified() {
 			t.Errorf("source %q modified %v", h.a.sourceKey, h.a.win.Modified())
 		}
-		if got := h.a.win.Widget().WindowTitle(); got != "Holiday essay — English Tutor" {
+		if got := h.a.win.Title(); got != "Holiday essay — English Tutor" {
 			t.Errorf("title = %q", got)
 		}
 	})
@@ -432,7 +432,7 @@ func TestSaveToLibraryCreatesADocument(t *testing.T) {
 
 	// The next Save to library updates that document instead of adding another.
 	fd.titleOK = false // no title would be asked anyway
-	onUI(func() { h.a.win.InsertTextAt(0, "Edited. "); h.a.onSaveToLibrary() })
+	h.onUI(func() { h.a.win.InsertTextAt(0, "Edited. "); h.a.onSaveToLibrary() })
 	docs, _ = h.st.ListDocuments(context.Background())
 	if len(docs) != 1 || !strings.HasPrefix(docs[0].Content, "Edited. ") || docs[0].Title != "Holiday essay" {
 		t.Errorf("documents = %+v", docs)
@@ -446,7 +446,7 @@ func TestSaveToLibraryCancelledAddsNothing(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.titleOK = false
 	h.typed("text")
-	onUI(func() { h.a.onSaveToLibrary() })
+	h.onUI(func() { h.a.onSaveToLibrary() })
 	if docs, _ := h.st.ListDocuments(context.Background()); len(docs) != 0 || !h.modified() {
 		t.Errorf("documents = %+v, modified %v", docs, h.modified())
 	}
@@ -455,10 +455,10 @@ func TestSaveToLibraryCancelledAddsNothing(t *testing.T) {
 func TestSaveToLibraryFromAFileMovesTheSource(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.openPath, fd.openOK = writeFile(t, "a.txt", []byte("from a file")), true
-	onUI(func() { h.a.onOpen() })
+	h.onUI(func() { h.a.onOpen() })
 	fd.title, fd.titleOK = "Kept", true
-	onUI(func() { h.a.win.InsertTextAt(0, "x"); h.a.onSaveToLibrary() })
-	onUI(func() {
+	h.onUI(func() { h.a.win.InsertTextAt(0, "x"); h.a.onSaveToLibrary() })
+	h.onUI(func() {
 		if !strings.HasPrefix(h.a.sourceKey, "doc:") {
 			t.Errorf("source = %q: the text's identity is where it was most recently saved", h.a.sourceKey)
 		}
@@ -475,16 +475,16 @@ func TestOpenFromTheLibraryAndSaveBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd.docID, fd.docOK = doc.ID, true
-	onUI(func() { h.a.onLibrary() })
-	onUI(func() {
+	h.onUI(func() { h.a.onLibrary() })
+	h.onUI(func() {
 		if h.a.win.Text() != "Dear Sir,\nthanks." || h.a.win.Modified() || h.a.sourceKey != "doc:"+itoa(doc.ID) {
 			t.Errorf("text %q modified %v source %q", h.a.win.Text(), h.a.win.Modified(), h.a.sourceKey)
 		}
-		if h.a.win.Widget().WindowTitle() != "Letter — English Tutor" {
-			t.Errorf("title = %q", h.a.win.Widget().WindowTitle())
+		if h.a.win.Title() != "Letter — English Tutor" {
+			t.Errorf("title = %q", h.a.win.Title())
 		}
 	})
-	onUI(func() { h.a.win.InsertTextAt(0, "PS "); h.a.onSaveToLibrary() })
+	h.onUI(func() { h.a.win.InsertTextAt(0, "PS "); h.a.onSaveToLibrary() })
 	docs, _ := h.st.ListDocuments(context.Background())
 	if len(docs) != 1 || !strings.HasPrefix(docs[0].Content, "PS Dear") || len(fd.titleSuggestions) != 0 {
 		t.Errorf("documents %+v, title questions %v: the open document is updated, not duplicated", docs, fd.titleSuggestions)
@@ -499,7 +499,7 @@ func TestLibraryOpenAsksAboutUnsavedChanges(t *testing.T) {
 	}
 	fd.docID, fd.docOK, fd.unsaved = doc.ID, true, UnsavedCancel
 	h.typed("work in progress")
-	onUI(func() { h.a.onLibrary() })
+	h.onUI(func() { h.a.onLibrary() })
 	if h.text() != "work in progress" || len(fd.unsavedAsked) != 1 {
 		t.Errorf("text %q, asked %v", h.text(), fd.unsavedAsked)
 	}
@@ -509,7 +509,7 @@ func TestLibraryDocumentThatVanishedShowsAnError(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	fd.docID, fd.docOK = 999, true
 	h.typed("work")
-	onUI(func() {
+	h.onUI(func() {
 		h.a.onLibrary()
 		if h.a.win.ErrorText() == "" || h.a.win.Text() != "work" {
 			t.Errorf("banner %q text %q", h.a.win.ErrorText(), h.a.win.Text())
@@ -524,12 +524,12 @@ func TestRenamingAndDeletingTheOpenDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd.docID, fd.docOK = doc.ID, true
-	onUI(func() { h.a.onLibrary() })
+	h.onUI(func() { h.a.onLibrary() })
 
-	onUI(func() {
+	h.onUI(func() {
 		h.a.onDocumentRenamed(doc.ID+1, "other") // another document: ignored
 		h.a.onDocumentRenamed(doc.ID, "Better title")
-		if got := h.a.win.Widget().WindowTitle(); got != "Better title — English Tutor" {
+		if got := h.a.win.Title(); got != "Better title — English Tutor" {
 			t.Errorf("title = %q", got)
 		}
 		h.a.onDocumentDeleted(doc.ID + 1)
@@ -546,7 +546,7 @@ func TestRenamingAndDeletingTheOpenDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd.title, fd.titleOK = "Second copy", true
-	onUI(func() { h.a.win.InsertTextAt(0, "x"); h.a.onSaveToLibrary() })
+	h.onUI(func() { h.a.win.InsertTextAt(0, "x"); h.a.onSaveToLibrary() })
 	docs, _ := h.st.ListDocuments(context.Background())
 	if len(docs) != 1 || docs[0].Title != "Second copy" {
 		t.Errorf("documents = %+v", docs)
@@ -560,11 +560,11 @@ func TestSavingToADocumentDeletedMeanwhile(t *testing.T) {
 		t.Fatal(err)
 	}
 	fd.docID, fd.docOK = doc.ID, true
-	onUI(func() { h.a.onLibrary() })
+	h.onUI(func() { h.a.onLibrary() })
 	if err := h.st.DeleteDocument(context.Background(), doc.ID); err != nil { // deleted from somewhere else
 		t.Fatal(err)
 	}
-	onUI(func() {
+	h.onUI(func() {
 		h.a.win.InsertTextAt(0, "x")
 		h.a.onSaveToLibrary()
 		if !strings.Contains(h.a.win.ErrorText(), "no longer exists") || !h.a.win.Modified() || h.a.place.docID != 0 {
@@ -584,16 +584,20 @@ func TestClosingAsksAboutUnsavedChanges(t *testing.T) {
 			h, fd := newSavingHarness(t)
 			fd.unsaved = tt.choice
 			h.typed("draft")
-			onUI(func() {
-				if got := h.a.canClose(); got != tt.want {
-					t.Errorf("canClose() = %v, want %v", got, tt.want)
+			h.onUI(func() {
+				got := false
+				h.a.confirmDiscard(func(ok bool) { got = ok })
+				if got != tt.want {
+					t.Errorf("confirmDiscard() = %v, want %v", got, tt.want)
 				}
 			})
 		})
 	}
 	h, fd := newSavingHarness(t)
-	onUI(func() {
-		if !h.a.canClose() || len(fd.unsavedAsked) != 0 {
+	h.onUI(func() {
+		got := false
+		h.a.confirmDiscard(func(ok bool) { got = ok })
+		if !got || len(fd.unsavedAsked) != 0 {
 			t.Error("an unchanged text closes without a question")
 		}
 	})
@@ -604,8 +608,8 @@ func TestClosingSavesWhereTheTextBelongs(t *testing.T) {
 		h, fd := newSavingHarness(t)
 		path := writeFile(t, "a.txt", []byte("old"))
 		fd.openPath, fd.openOK, fd.unsaved = path, true, UnsavedSave
-		onUI(func() { h.a.onOpen() })
-		onUI(func() { h.a.win.InsertTextAt(3, " and new"); h.a.canClose() })
+		h.onUI(func() { h.a.onOpen() })
+		h.onUI(func() { h.a.win.InsertTextAt(3, " and new"); h.a.confirmDiscard(func(bool) {}) })
 		if got, _ := os.ReadFile(path); string(got) != "old and new" || len(fd.saveSuggestions) != 0 {
 			t.Errorf("file %q, save dialogs %v: Save writes to the open file", got, fd.saveSuggestions)
 		}
@@ -617,8 +621,8 @@ func TestClosingSavesWhereTheTextBelongs(t *testing.T) {
 			t.Fatal(err)
 		}
 		fd.docID, fd.docOK, fd.unsaved = doc.ID, true, UnsavedSave
-		onUI(func() { h.a.onLibrary() })
-		onUI(func() { h.a.win.InsertTextAt(4, " Sir"); h.a.canClose() })
+		h.onUI(func() { h.a.onLibrary() })
+		h.onUI(func() { h.a.win.InsertTextAt(4, " Sir"); h.a.confirmDiscard(func(bool) {}) })
 		if got, _ := h.st.GetDocument(context.Background(), doc.ID); got.Content != "Dear Sir" || len(fd.saveSuggestions) != 0 {
 			t.Errorf("document %+v, save dialogs %v: a library text is saved to the library", got, fd.saveSuggestions)
 		}
@@ -631,14 +635,14 @@ func TestNewStopsARunningCheck(t *testing.T) {
 	h.typed(sample)
 	h.checkButton()
 	h.waitFor("the request", func() bool { return h.a.checking })
-	onUI(func() { h.a.onNew() })
-	onUI(func() {
+	h.onUI(func() { h.a.onNew() })
+	h.onUI(func() {
 		if h.a.checking || h.a.win.CheckButtonText() != "Check" || h.a.win.StatusText() != "Ready" {
 			t.Errorf("checking %v, button %q, status %q", h.a.checking, h.a.win.CheckButtonText(), h.a.win.StatusText())
 		}
 	})
-	time.Sleep(50 * time.Millisecond) // the cancelled check reports meanwhile
-	onUI(func() {
+	h.sleep(50 * time.Millisecond) // the cancelled check reports meanwhile
+	h.onUI(func() {
 		if h.a.win.StatusText() != "Ready" || len(h.a.win.Underlines()) != 0 {
 			t.Errorf("a result for the old text must be ignored: status %q underlines %v", h.a.win.StatusText(), h.a.win.Underlines())
 		}
@@ -649,13 +653,13 @@ func TestLoadingATextIsNotTypingForAutoCheck(t *testing.T) {
 	fake := llmtest.New(twoIssues())
 	h := newHarness(t, fake)
 	fd := &fakeDialogs{openPath: writeFile(t, "a.txt", []byte(sample)), openOK: true}
-	onUI(func() {
+	h.onUI(func() {
 		h.a.dialogs = fd
 		h.a.autoDelay = 20 * time.Millisecond
 		h.a.onAutoCheckChanged(true)
 		h.a.onOpen()
 	})
-	time.Sleep(120 * time.Millisecond)
+	h.sleep(120 * time.Millisecond)
 	if n := len(fake.Calls()); n != 0 {
 		t.Errorf("calls = %d: opening a file must not start an auto-check", n)
 	}
@@ -666,8 +670,8 @@ func TestWindowStateIsConsistentAfterOpen(t *testing.T) {
 	h.checked(nil)
 	h.selectIssue(1)
 	fd.openPath, fd.openOK, fd.unsaved = writeFile(t, "a.txt", []byte("fresh")), true, UnsavedDiscard
-	onUI(func() { h.a.onOpen() })
-	onUI(func() {
+	h.onUI(func() { h.a.onOpen() })
+	h.onUI(func() {
 		if h.a.win.ExplanationState() != view.ExplainIdle || h.a.win.SelectedIssueRow() != 0 || len(h.a.win.IssueRowIDs()) != 0 {
 			t.Errorf("panel %v, selected row %d, rows %v", h.a.win.ExplanationState(), h.a.win.SelectedIssueRow(), h.a.win.IssueRowIDs())
 		}

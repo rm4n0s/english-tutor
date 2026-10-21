@@ -8,14 +8,14 @@ from PIL import Image, ImageDraw, ImageFont
 
 # number -> (x, y) of the centre of the marker
 CALLOUTS = {
-    1: (700, 16),    # toolbar, row 1: LLM, Check, Auto-check, Statistics, Preferences, web server
-    2: (700, 49),    # toolbar, row 2: files
-    3: (420, 78),    # legend
-    4: (720, 210),   # the text, with underlines
-    5: (1050, 150),  # issues list
-    6: (1010, 432),  # header with the count, Regenerate, Not an error
-    7: (1040, 765),  # explanation
-    8: (600, 789),   # status bar
+    1: (940, 30),    # toolbar, row 1: LLM, Check, Auto-check, Statistics, Preferences, web server
+    2: (665, 76),    # toolbar, row 2: files
+    3: (420, 114),   # legend
+    4: (700, 245),   # the text, with underlines
+    5: (1060, 114),  # issues list
+    6: (1062, 470),  # header with the count, Regenerate, Not an error
+    7: (1062, 620),  # explanation
+    8: (400, 788),   # status bar
 }
 COLOR = (200, 40, 40)
 
