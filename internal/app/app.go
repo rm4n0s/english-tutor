@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"log/slog"
 	"strings"
 	"sync"
@@ -71,7 +72,7 @@ type App struct {
 	// The fields below belong to the UI thread.
 	checkSeq     uint64 // number of the latest check started
 	checking     bool
-	status       ui.CheckStatus
+	status       view.CheckStatus
 	unplaced     int
 	lastUsage    llm.Usage
 	sessionUsage llm.Usage

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"slices"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func TestSetIssuesShowsRows(t *testing.T) {
 			t.Error("with rows there is no empty line")
 		}
 		first, second := w.IssueRowText(0), w.IssueRowText(1)
-		for _, want := range []string{">G<", "He go to school", "Subject-verb agreement", "<b>x7</b>", CategoryColor(analysis.Grammar, w.isDark())} {
+		for _, want := range []string{">G<", "He go to school", "Subject-verb agreement", "<b>x7</b>", view.CategoryColor(analysis.Grammar, w.isDark())} {
 			if !strings.Contains(first, want) {
 				t.Errorf("first row missing %q:\n%s", want, first)
 			}
@@ -132,7 +133,7 @@ func TestIssueContextMenu(t *testing.T) {
 func TestExplanationStates(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
 		w.SetLLMs([]LLMChoice{{ID: 1, Name: "local"}}, 1)
-		type view struct {
+		type shown struct {
 			header     string
 			redo       string
 			cancel     bool
@@ -142,25 +143,25 @@ func TestExplanationStates(t *testing.T) {
 		}
 		tests := []struct {
 			name   string
-			state  ExplainState
+			state  view.ExplainState
 			header string
 			body   string
-			want   view
+			want   shown
 		}{
-			{"idle", ExplainIdle, "ignored", "ignored", view{bodyHas: "Select an error"}},
-			{"loading", ExplainLoading, "Verb tense: no mistake of this type recorded yet", "Explaining **he go**...", view{
+			{"idle", view.ExplainIdle, "ignored", "ignored", shown{bodyHas: "Select an error"}},
+			{"loading", view.ExplainLoading, "Verb tense: no mistake of this type recorded yet", "Explaining **he go**...", shown{
 				header: "Verb tense: no mistake of this type recorded yet", cancel: true, notAnError: true, progress: true, bodyHas: "Explaining he go"}},
-			{"ready", ExplainReady, "Verb tense", "### What is wrong\nUse goes.", view{
+			{"ready", view.ExplainReady, "Verb tense", "### What is wrong\nUse goes.", shown{
 				header: "Verb tense", redo: "Regenerate", notAnError: true, bodyHas: "What is wrong"}},
-			{"failed", ExplainFailed, "Verb tense", "The request to local failed: refused", view{
+			{"failed", view.ExplainFailed, "Verb tense", "The request to local failed: refused", shown{
 				header: "Verb tense", redo: "Retry", notAnError: true, bodyHas: "refused"}},
-			{"cancelled", ExplainCancelled, "Verb tense", "", view{
+			{"cancelled", view.ExplainCancelled, "Verb tense", "", shown{
 				header: "Verb tense", redo: "Regenerate", notAnError: true, bodyHas: "Explanation cancelled."}},
 		}
 		for _, tt := range tests {
 			w.SetExplanation(tt.state, tt.header, tt.body)
 			redo, cancel, notAnError := w.ExplanationButtons()
-			got := view{w.ExplanationHeader(), redo, cancel, notAnError, w.ExplanationProgressShown(), ""}
+			got := shown{w.ExplanationHeader(), redo, cancel, notAnError, w.ExplanationProgressShown(), ""}
 			if !strings.Contains(w.ExplanationText(), tt.want.bodyHas) {
 				t.Errorf("%s: body = %q, want it to contain %q", tt.name, w.ExplanationText(), tt.want.bodyHas)
 			}
@@ -197,7 +198,7 @@ func TestStreamingKeepsTheViewAtTheEnd(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
 		w.win.Resize(900, 600)
 		w.Show()
-		w.SetExplanation(ExplainLoading, "h", "start")
+		w.SetExplanation(view.ExplainLoading, "h", "start")
 		long := strings.Repeat("A line of the explanation.\n\n", 200)
 		w.SetExplanationMarkdown(long)
 		bar := w.explain.VerticalScrollBar()
@@ -226,7 +227,7 @@ func TestLinksInExplanations(t *testing.T) {
 		)
 		w.SetHandlers(Handlers{Preferences: func() { prefs++ }})
 
-		w.SetExplanation(ExplainReady, "h", "[rule](https://example.com/rule)")
+		w.SetExplanation(view.ExplainReady, "h", "[rule](https://example.com/rule)")
 		w.ClickExplanationLink("https://example.com/rule")
 		if !slices.Equal(asked, []string{"https://example.com/rule"}) || !slices.Equal(opened, []string{"https://example.com/rule"}) {
 			t.Errorf("a confirmed https link: asked %v, opened %v", asked, opened)
@@ -245,7 +246,7 @@ func TestLinksInExplanations(t *testing.T) {
 			t.Errorf("other schemes are ignored, and preferences: only works in the hint: asked %v opened %v prefs %d", asked, opened, prefs)
 		}
 
-		w.SetExplanation(ExplainIdle, "", "")
+		w.SetExplanation(view.ExplainIdle, "", "")
 		w.ClickExplanationLink("preferences:")
 		if prefs != 1 {
 			t.Errorf("the hint's preferences link must open Preferences, got %d", prefs)
@@ -257,7 +258,7 @@ func TestNoResourcesAreLoaded(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
 		// An image in an explanation must not be fetched or read from disk: the
 		// browser's resource loader returns nothing for every URL.
-		w.SetExplanation(ExplainReady, "h", "![x](file:///etc/hostname) and ![y](https://example.com/a.png) <img src=\"file:///etc/hostname\">")
+		w.SetExplanation(view.ExplainReady, "h", "![x](file:///etc/hostname) and ![y](https://example.com/a.png) <img src=\"file:///etc/hostname\">")
 		for _, u := range []string{"file:///etc/hostname", "https://example.com/a.png"} {
 			if v := w.explain.LoadResource(2, qt.NewQUrl3(u)); v.IsValid() {
 				t.Errorf("resource %s was loaded", u)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // maxTextBytes is the longest text the page works with. A text longer than this
@@ -71,7 +71,7 @@ type workspace struct {
 
 	checkSeq     uint64
 	checking     bool
-	status       ui.CheckStatus
+	status       view.CheckStatus
 	unplaced     int
 	lastUsage    llm.Usage
 	sessionUsage llm.Usage
@@ -86,7 +86,7 @@ type workspace struct {
 	gotoPos        int
 
 	explainSeq    uint64
-	explainState  ui.ExplainState
+	explainState  view.ExplainState
 	explainHeader string
 	explainBody   string // the markdown being shown
 	explainBuf    strings.Builder
@@ -379,14 +379,14 @@ func (w *workspace) loadText(text string) {
 	w.checkSeq++ // the result of a check that was running is stale now
 	w.explainSeq++
 	w.checking = false
-	w.status = ui.StatusIdle
+	w.status = view.StatusIdle
 	w.unplaced = 0
 	w.resultRecorded = false
 	w.notice = ""
 	w.banner = ""
 	w.state.Reset()
 	w.text, w.savedText = text, text
-	w.explainState = ui.ExplainIdle
+	w.explainState = view.ExplainIdle
 	w.explainBody, w.explainHeader = "", ""
 	w.stopAutoCheck() // loading a text is not typing
 	w.touch(rAll)

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
 	"time"
 	"unicode"
@@ -130,7 +131,7 @@ type MainWindow struct {
 	redoBtn       *qt.QPushButton
 	cancelBtn     *qt.QPushButton
 	notErrorBtn   *qt.QPushButton
-	explainState  ExplainState
+	explainState  view.ExplainState
 	confirmLink   func(url string) bool // asks before a link is opened; tests replace it
 	openLink      func(url string)      // opens a confirmed link; tests replace it
 
@@ -215,13 +216,13 @@ func (w *MainWindow) buildCentral() {
 	dark := w.isDark()
 	for _, c := range legendOrder {
 		b := qt.NewQToolButton2()
-		b.SetText(CategorySample(c) + " " + c.Label())
+		b.SetText(view.CategorySample(c) + " " + c.Label())
 		b.SetCheckable(true)
 		b.SetChecked(true)
 		b.SetToolTip(fmt.Sprintf("Click to hide or show the %s underlines", c.Label()))
 		b.SetStyleSheet(fmt.Sprintf(
 			"QToolButton { color: %s; font-weight: bold; border: none; padding: 2px 6px; }"+
-				"QToolButton:!checked { color: gray; font-weight: normal; }", CategoryColor(c, dark)))
+				"QToolButton:!checked { color: gray; font-weight: normal; }", view.CategoryColor(c, dark)))
 		w.legend[c] = b
 		legendRow.AddWidget(b.QWidget)
 	}
@@ -520,7 +521,7 @@ func (w *MainWindow) SetLLMs(choices []LLMChoice, selected uint) {
 	if !empty {
 		w.llmCombo.SetCurrentIndex(current)
 	}
-	if w.explainState == ExplainIdle {
+	if w.explainState == view.ExplainIdle {
 		w.ShowHint()
 	}
 }
@@ -603,7 +604,7 @@ func (w *MainWindow) Text() string { return w.editor.ToPlainText() }
 func (w *MainWindow) SetText(text string) { w.editor.SetPlainText(text) }
 
 func (w *MainWindow) updateWordCount() {
-	w.wordsLabel.SetText(FormatWords(analysis.WordCount(w.editor.ToPlainText())))
+	w.wordsLabel.SetText(view.FormatWords(analysis.WordCount(w.editor.ToPlainText())))
 }
 
 // SetStatus sets the left part of the status bar (check state and counts).
@@ -611,11 +612,11 @@ func (w *MainWindow) SetStatus(text string) { w.stateLabel.SetText(text) }
 
 // SetTokens shows the token usage of the last request and of the session.
 func (w *MainWindow) SetTokens(last, session llm.Usage) {
-	w.tokensLabel.SetText(FormatTokens(last, session))
+	w.tokensLabel.SetText(view.FormatTokens(last, session))
 }
 
 // ShowHint shows the idle hint, or the no-LLM message if no LLM is configured.
-func (w *MainWindow) ShowHint() { w.SetExplanation(ExplainIdle, "", "") }
+func (w *MainWindow) ShowHint() { w.SetExplanation(view.ExplainIdle, "", "") }
 
 // Geometry returns the window geometry in Qt's saved form.
 func (w *MainWindow) Geometry() []byte { return w.win.SaveGeometry() }
@@ -686,12 +687,12 @@ func (w *MainWindow) SetUnderlines(us []Underline) {
 		cur := qt.NewQTextCursor2(w.editor.Document())
 		cur.SetPosition(u.Start)
 		cur.SetPosition2(u.End, qt.QTextCursor__KeepAnchor)
-		color := qt.NewQColor6(CategoryColor(u.Category, dark))
+		color := qt.NewQColor6(view.CategoryColor(u.Category, dark))
 		format := qt.NewQTextCharFormat()
-		format.SetUnderlineStyle(underlineStyle(CategoryStyle(u.Category)))
+		format.SetUnderlineStyle(underlineStyle(view.CategoryStyle(u.Category)))
 		format.SetUnderlineColor(color)
 		if u.Selected {
-			bg := qt.NewQColor6(CategoryColor(u.Category, dark))
+			bg := qt.NewQColor6(view.CategoryColor(u.Category, dark))
 			bg.SetAlpha(selectedAlpha)
 			brush := qt.NewQBrush3(bg)
 			format.SetBackground(brush)
@@ -713,11 +714,11 @@ func (w *MainWindow) SetUnderlines(us []Underline) {
 // need to know what is drawn.
 func (w *MainWindow) Underlines() []Underline { return append([]Underline(nil), w.underlines...) }
 
-func underlineStyle(s UnderlineStyle) qt.QTextCharFormat__UnderlineStyle {
+func underlineStyle(s view.UnderlineStyle) qt.QTextCharFormat__UnderlineStyle {
 	switch s {
-	case UnderlineDash:
+	case view.UnderlineDash:
 		return qt.QTextCharFormat__DashUnderline
-	case UnderlineDot:
+	case view.UnderlineDot:
 		return qt.QTextCharFormat__DotLine
 	default:
 		return qt.QTextCharFormat__WaveUnderline

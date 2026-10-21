@@ -1,4 +1,4 @@
-package ui
+package view
 
 import (
 	"fmt"
@@ -24,28 +24,28 @@ const (
 	ExplainCancelled
 )
 
-// explainControls says which parts of the panel are visible in a state.
-type explainControls struct {
-	header     bool   // the line with the error type and the count
-	progress   bool   // the busy indicator
-	cancel     bool   // the Cancel button
-	redo       bool   // the Regenerate / Retry button
-	redoLabel  string // its text
-	notAnError bool
+// ExplainControls says which parts of the panel are visible in a state.
+type ExplainControls struct {
+	Header     bool   // the line with the error type and the count
+	Progress   bool   // the busy indicator
+	Cancel     bool   // the Cancel button
+	Redo       bool   // the Regenerate / Retry button
+	RedoLabel  string // its text
+	NotAnError bool
 }
 
-func controlsFor(s ExplainState) explainControls {
+func ControlsFor(s ExplainState) ExplainControls {
 	switch s {
 	case ExplainLoading:
-		return explainControls{header: true, progress: true, cancel: true, notAnError: true}
+		return ExplainControls{Header: true, Progress: true, Cancel: true, NotAnError: true}
 	case ExplainReady:
-		return explainControls{header: true, redo: true, redoLabel: "Regenerate", notAnError: true}
+		return ExplainControls{Header: true, Redo: true, RedoLabel: "Regenerate", NotAnError: true}
 	case ExplainFailed:
-		return explainControls{header: true, redo: true, redoLabel: "Retry", notAnError: true}
+		return ExplainControls{Header: true, Redo: true, RedoLabel: "Retry", NotAnError: true}
 	case ExplainCancelled:
-		return explainControls{header: true, redo: true, redoLabel: "Regenerate", notAnError: true}
+		return ExplainControls{Header: true, Redo: true, RedoLabel: "Regenerate", NotAnError: true}
 	default:
-		return explainControls{}
+		return ExplainControls{}
 	}
 }
 

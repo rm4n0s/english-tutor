@@ -1,4 +1,4 @@
-package ui
+package view
 
 import (
 	"net/url"
@@ -10,19 +10,19 @@ func TestControlsFor(t *testing.T) {
 	tests := []struct {
 		name  string
 		state ExplainState
-		want  explainControls
+		want  ExplainControls
 	}{
-		{"idle shows only the hint", ExplainIdle, explainControls{}},
-		{"loading", ExplainLoading, explainControls{header: true, progress: true, cancel: true, notAnError: true}},
-		{"ready", ExplainReady, explainControls{header: true, redo: true, redoLabel: "Regenerate", notAnError: true}},
-		{"failed", ExplainFailed, explainControls{header: true, redo: true, redoLabel: "Retry", notAnError: true}},
-		{"cancelled", ExplainCancelled, explainControls{header: true, redo: true, redoLabel: "Regenerate", notAnError: true}},
-		{"unknown state is idle", ExplainState(99), explainControls{}},
+		{"idle shows only the hint", ExplainIdle, ExplainControls{}},
+		{"loading", ExplainLoading, ExplainControls{Header: true, Progress: true, Cancel: true, NotAnError: true}},
+		{"ready", ExplainReady, ExplainControls{Header: true, Redo: true, RedoLabel: "Regenerate", NotAnError: true}},
+		{"failed", ExplainFailed, ExplainControls{Header: true, Redo: true, RedoLabel: "Retry", NotAnError: true}},
+		{"cancelled", ExplainCancelled, ExplainControls{Header: true, Redo: true, RedoLabel: "Regenerate", NotAnError: true}},
+		{"unknown state is idle", ExplainState(99), ExplainControls{}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := controlsFor(tt.state); got != tt.want {
-				t.Errorf("controlsFor() = %+v, want %+v", got, tt.want)
+			if got := ControlsFor(tt.state); got != tt.want {
+				t.Errorf("ControlsFor() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}

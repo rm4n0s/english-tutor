@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"html"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -98,10 +99,10 @@ func (w *MainWindow) buildIssueMenu() *qt.QMenu {
 }
 
 func (w *MainWindow) onLink(raw string) {
-	switch DecideLink(raw, w.explainState == ExplainIdle) {
-	case LinkPreferences:
+	switch view.DecideLink(raw, w.explainState == view.ExplainIdle) {
+	case view.LinkPreferences:
 		call(w.handlers.Preferences)
-	case LinkConfirm:
+	case view.LinkConfirm:
 		if w.confirmLink(raw) {
 			w.openLink(raw)
 		}
@@ -111,23 +112,23 @@ func (w *MainWindow) onLink(raw string) {
 // SetExplanation puts the panel into a state. header is the line above the
 // explanation (the error type and its count) and markdown the body; the idle
 // state ignores both and shows the hint.
-func (w *MainWindow) SetExplanation(state ExplainState, header, markdown string) {
+func (w *MainWindow) SetExplanation(state view.ExplainState, header, markdown string) {
 	w.explainState = state
-	c := controlsFor(state)
+	c := view.ControlsFor(state)
 	w.explainHeader.SetText(header)
-	w.explainHeader.SetVisible(c.header)
-	w.explainBar.SetVisible(c.progress)
-	w.cancelBtn.SetVisible(c.cancel)
-	w.redoBtn.SetVisible(c.redo)
-	if c.redo {
-		w.redoBtn.SetText(c.redoLabel)
+	w.explainHeader.SetVisible(c.Header)
+	w.explainBar.SetVisible(c.Progress)
+	w.cancelBtn.SetVisible(c.Cancel)
+	w.redoBtn.SetVisible(c.Redo)
+	if c.Redo {
+		w.redoBtn.SetText(c.RedoLabel)
 	}
-	w.notErrorBtn.SetVisible(c.notAnError)
+	w.notErrorBtn.SetVisible(c.NotAnError)
 
 	switch {
-	case state == ExplainIdle:
+	case state == view.ExplainIdle:
 		markdown = w.hintText()
-	case state == ExplainCancelled && markdown == "":
+	case state == view.ExplainCancelled && markdown == "":
 		markdown = "Explanation cancelled."
 	}
 	w.explain.SetMarkdown(markdown)
@@ -200,7 +201,7 @@ func rowHTML(r issues.Row, dark bool) string {
 		badge = "&nbsp;&nbsp;<b>" + html.EscapeString(b) + "</b>"
 	}
 	return fmt.Sprintf(`<span style="color:%s; font-weight:bold">%s</span>&nbsp;%s<br/><span style="color:gray">%s%s</span>`,
-		CategoryColor(r.Category, dark), html.EscapeString(r.Marker), html.EscapeString(r.Snippet),
+		view.CategoryColor(r.Category, dark), html.EscapeString(r.Marker), html.EscapeString(r.Snippet),
 		html.EscapeString(r.Label), badge)
 }
 
@@ -255,7 +256,7 @@ func (w *MainWindow) DoubleClickIssueRow(row int) {
 }
 
 // ExplanationState returns the state of the panel.
-func (w *MainWindow) ExplanationState() ExplainState { return w.explainState }
+func (w *MainWindow) ExplanationState() view.ExplainState { return w.explainState }
 
 // ExplanationText returns the body of the panel as plain text.
 func (w *MainWindow) ExplanationText() string { return w.explain.ToPlainText() }

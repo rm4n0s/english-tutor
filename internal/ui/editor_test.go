@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -58,9 +59,9 @@ func TestSetUnderlines(t *testing.T) {
 		}
 		dark := w.isDark()
 		want := []look{
-			{"He go", qt.QTextCharFormat__WaveUnderline, CategoryColor(analysis.Grammar, dark), false},
-			{"Make a photo", qt.QTextCharFormat__DashUnderline, CategoryColor(analysis.Vocabulary, dark), false},
-			{"I very like it", qt.QTextCharFormat__DotLine, CategoryColor(analysis.Syntax, dark), true},
+			{"He go", qt.QTextCharFormat__WaveUnderline, view.CategoryColor(analysis.Grammar, dark), false},
+			{"Make a photo", qt.QTextCharFormat__DashUnderline, view.CategoryColor(analysis.Vocabulary, dark), false},
+			{"I very like it", qt.QTextCharFormat__DotLine, view.CategoryColor(analysis.Syntax, dark), true},
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("looks = %+v\nwant   %+v", got, want)

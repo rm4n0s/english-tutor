@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"html"
 	"html/template"
 	"strings"
@@ -142,7 +143,7 @@ func (w *workspace) renderToolbar(remote bool) template.HTML {
 	}
 	for _, c := range []analysis.Category{analysis.Grammar, analysis.Vocabulary, analysis.Syntax} {
 		d.Legend = append(d.Legend, legendEntry{
-			ID: string(c), Label: c.Label(), Sample: ui.CategorySample(c), On: w.state.CategoryVisible(c),
+			ID: string(c), Label: c.Label(), Sample: view.CategorySample(c), On: w.state.CategoryVisible(c),
 		})
 	}
 	return template.HTML(execute("toolbar", d)) //nolint:gosec // rendered by html/template
@@ -240,23 +241,23 @@ type explainData struct {
 func (w *workspace) renderExplain() template.HTML {
 	d := explainData{}
 	switch w.explainState {
-	case ui.ExplainIdle:
+	case view.ExplainIdle:
 		d.Hint = true
 		d.NoLLM = len(w.llms) == 0
-	case ui.ExplainLoading:
+	case view.ExplainLoading:
 		d.Header, d.Loading, d.CanCancel, d.NotAnError = w.explainHeader, true, true, true
 		if w.explainBody == "" {
 			d.Body = renderMarkdown("Explaining **" + w.explainTitle + "**...")
 		} else {
 			d.Body = renderMarkdown(w.explainBody)
 		}
-	case ui.ExplainReady:
+	case view.ExplainReady:
 		d.Header, d.RedoLabel, d.NotAnError = w.explainHeader, "Regenerate", true
 		d.Body = renderMarkdown(w.explainBody)
-	case ui.ExplainFailed:
+	case view.ExplainFailed:
 		d.Header, d.RedoLabel, d.NotAnError = w.explainHeader, "Retry", true
 		d.Failed, d.Plain = true, w.explainBody
-	case ui.ExplainCancelled:
+	case view.ExplainCancelled:
 		d.Header, d.RedoLabel, d.NotAnError = w.explainHeader, "Regenerate", true
 		d.Body = renderMarkdown("Explanation cancelled.")
 	}
@@ -274,12 +275,12 @@ type statusData struct {
 func (w *workspace) renderStatus() template.HTML {
 	state := w.notice
 	if state == "" {
-		state = ui.FormatStatus(w.status, w.state.Phase() == issues.Checked, len(w.state.Items()), w.unplaced)
+		state = view.FormatStatus(w.status, w.state.Phase() == issues.Checked, len(w.state.Items()), w.unplaced)
 	}
 	return template.HTML(execute("status", statusData{ //nolint:gosec // rendered by html/template
 		State:  state,
-		Words:  ui.FormatWords(analysis.WordCount(w.text)),
-		Tokens: ui.FormatTokens(w.lastUsage, w.sessionUsage),
+		Words:  view.FormatWords(analysis.WordCount(w.text)),
+		Tokens: view.FormatTokens(w.lastUsage, w.sessionUsage),
 	}))
 }
 
@@ -372,7 +373,7 @@ func (w *workspace) prefsData(pv *prefsView) *prefsData {
 			fd.Providers = append(fd.Providers, selectOption{Value: string(p), Label: string(p), Selected: string(p) == f.Provider})
 		}
 		fd.Placeholder, fd.ProviderTip = providerHints(f.Provider)
-		fd.Privacy = ui.PrivacyNote(f.Provider, f.BaseURL)
+		fd.Privacy = view.PrivacyNote(f.Provider, f.BaseURL)
 		d.Form = fd
 	}
 	return d
@@ -411,9 +412,9 @@ var statsColumnTitles = []string{"Error type", "Category", "Total", "Last 7 days
 
 func (w *workspace) statsData(sv *statsView) *statsData {
 	d := &statsData{statsView: sv, Mistakes: sv.Tab == "mistakes"}
-	rows := ui.FilterStats(sv.rows, sv.filter)
-	ui.SortStats(rows, sv.sort)
-	d.Summary = ui.StatsSummary(sv.rows, sv.filter)
+	rows := view.FilterStats(sv.rows, sv.filter)
+	view.SortStats(rows, sv.sort)
+	d.Summary = view.StatsSummary(sv.rows, sv.filter)
 	d.HasRows = len(sv.rows) > 0
 	for i, title := range statsColumnTitles {
 		c := statsColumn{Index: i, Title: title}
@@ -426,11 +427,11 @@ func (w *workspace) statsData(sv *statsView) *statsData {
 		d.Columns = append(d.Columns, c)
 	}
 	for _, r := range rows {
-		cells := ui.StatsCells(r)
+		cells := view.StatsCells(r)
 		d.Table = append(d.Table, statsRow{Type: r.ErrorType, Cells: cells[:], Selected: r.ErrorType == sv.Selected})
 	}
 	for _, e := range sv.examples {
-		d.Examples = append(d.Examples, ui.FormatExample(e))
+		d.Examples = append(d.Examples, view.FormatExample(e))
 	}
 	d.Categories = []selectOption{{"", "All categories", sv.filter.Category == ""}}
 	for _, c := range analysis.Categories() {

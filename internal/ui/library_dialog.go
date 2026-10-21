@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -135,7 +136,7 @@ func (d *LibraryDialog) reload(selectID uint) {
 
 // libraryRowText is one row: the title and the day it was last changed.
 func libraryRowText(doc store.Document) string {
-	return fmt.Sprintf("%s  ·  %s", doc.Title, FormatDate(doc.UpdatedAt))
+	return fmt.Sprintf("%s  ·  %s", doc.Title, view.FormatDate(doc.UpdatedAt))
 }
 
 func (d *LibraryDialog) current() (store.Document, bool) {

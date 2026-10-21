@@ -237,3 +237,6 @@ func TestModifiedTracking(t *testing.T) {
 		}
 	})
 }
+
+// day is a fixed time in October 2026.
+func day(d int) time.Time { return time.Date(2026, 10, d, 12, 0, 0, 0, time.UTC) }

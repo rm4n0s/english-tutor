@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 
 	qt "github.com/mappu/miqt/qt6"
 
@@ -44,8 +45,8 @@ type StatisticsDialog struct {
 
 	rows   []store.TypeStat // every row, unfiltered
 	shown  []store.TypeStat // rows after the filter and the sort
-	filter StatsFilter
-	sort   StatsSort
+	filter view.StatsFilter
+	sort   view.StatsSort
 
 	category   *qt.QComboBox
 	period     *qt.QComboBox
@@ -78,7 +79,7 @@ var statsPeriodChoices = []struct {
 
 // NewStatisticsDialog builds the dialog and loads the statistics into it.
 func NewStatisticsDialog(ctx context.Context, parent *qt.QWidget, backend StatisticsBackend, hooks StatisticsHooks) *StatisticsDialog {
-	d := &StatisticsDialog{ctx: ctx, backend: backend, hooks: hooks, sort: DefaultStatsSort}
+	d := &StatisticsDialog{ctx: ctx, backend: backend, hooks: hooks, sort: view.DefaultStatsSort}
 	d.dlg = qt.NewQDialog(parent)
 	d.dlg.SetWindowTitle("Statistics")
 	d.dlg.SetModal(true)
@@ -148,8 +149,8 @@ func (d *StatisticsDialog) buildMistakesTab() *qt.QWidget {
 	layout.AddWidget(d.summary.QWidget)
 
 	d.table = qt.NewQTableWidget(nil)
-	d.table.SetColumnCount(int(statsColumnCount))
-	d.table.SetHorizontalHeaderLabels(statsColumnTitles[:])
+	d.table.SetColumnCount(int(view.StatsColumnCount))
+	d.table.SetHorizontalHeaderLabels(view.StatsColumnTitles[:])
 	d.table.SetEditTriggers(qt.QAbstractItemView__NoEditTriggers)
 	d.table.SetSelectionBehavior(qt.QAbstractItemView__SelectRows)
 	d.table.SetSelectionMode(qt.QAbstractItemView__SingleSelection)
@@ -157,7 +158,7 @@ func (d *StatisticsDialog) buildMistakesTab() *qt.QWidget {
 	header := d.table.HorizontalHeader()
 	header.SetSectionsClickable(true)
 	header.SetSortIndicatorShown(true)
-	header.SetSectionResizeMode2(int(ColType), qt.QHeaderView__Stretch)
+	header.SetSectionResizeMode2(int(view.ColType), qt.QHeaderView__Stretch)
 	layout.AddWidget2(d.table.QWidget, 1)
 
 	layout.AddWidget(qt.NewQLabel3("What you wrote (the three most recent):").QWidget)
@@ -185,8 +186,8 @@ func (d *StatisticsDialog) buildMistakesTab() *qt.QWidget {
 		}
 	})
 	header.OnSectionClicked(func(col int) {
-		if col >= 0 && col < int(statsColumnCount) {
-			d.sort = NextSort(d.sort, StatsColumn(col))
+		if col >= 0 && col < int(view.StatsColumnCount) {
+			d.sort = view.NextSort(d.sort, view.StatsColumn(col))
 			d.redraw()
 		}
 	})
@@ -236,9 +237,9 @@ func (d *StatisticsDialog) reload() {
 
 // redraw applies the filter and the sort to the loaded rows.
 func (d *StatisticsDialog) redraw() {
-	d.shown = FilterStats(d.rows, d.filter)
-	SortStats(d.shown, d.sort)
-	d.summary.SetText(StatsSummary(d.rows, d.filter))
+	d.shown = view.FilterStats(d.rows, d.filter)
+	view.SortStats(d.shown, d.sort)
+	d.summary.SetText(view.StatsSummary(d.rows, d.filter))
 
 	order := qt.AscendingOrder
 	if d.sort.Descending {
@@ -249,10 +250,10 @@ func (d *StatisticsDialog) redraw() {
 	d.table.ClearContents()
 	d.table.SetRowCount(len(d.shown))
 	for r, row := range d.shown {
-		cells := StatsCells(row)
-		for c := StatsColumn(0); c < statsColumnCount; c++ {
+		cells := view.StatsCells(row)
+		for c := view.StatsColumn(0); c < view.StatsColumnCount; c++ {
 			item := qt.NewQTableWidgetItem2(cells[c])
-			if c >= ColTotal && c <= ColLast30 {
+			if c >= view.ColTotal && c <= view.ColLast30 {
 				item.SetTextAlignment(int(qt.AlignRight | qt.AlignVCenter))
 			}
 			d.table.SetItem(r, int(c), item)
@@ -272,7 +273,7 @@ func (d *StatisticsDialog) showExamples(row int) {
 		return
 	}
 	for _, e := range examples {
-		d.examples.AddItem(FormatExample(e))
+		d.examples.AddItem(view.FormatExample(e))
 	}
 }
 
@@ -286,7 +287,7 @@ func (d *StatisticsDialog) loadUsage() {
 		}
 		lists[i] = list
 	}
-	rows := UsageRows(lists[0], lists[1], lists[2])
+	rows := view.UsageRows(lists[0], lists[1], lists[2])
 	d.usageTable.ClearContents()
 	d.usageTable.SetRowCount(len(rows))
 	for r, row := range rows {

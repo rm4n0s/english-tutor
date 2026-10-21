@@ -1,6 +1,6 @@
 // Package ui is the Qt user interface. The files without Qt imports (colors.go,
 // format.go) hold the logic that can be tested without a display.
-package ui
+package view
 
 import "github.com/rm4n0s/english-tutor/internal/analysis"
 

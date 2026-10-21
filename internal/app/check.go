@@ -3,6 +3,7 @@ package app
 import (
 	"crypto/rand"
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func newSessionKey() string {
 func (a *App) startCheck(manual bool) {
 	if strings.TrimSpace(a.win.Text()) == "" {
 		if manual {
-			a.status = ui.StatusIdle
+			a.status = view.StatusIdle
 			a.win.SetStatus("Nothing to check yet. Write some text first.")
 		}
 		return
@@ -84,7 +85,7 @@ func (a *App) beginCheck(manual bool, scope *checkScope) {
 	a.checkSeq++
 	seq := a.checkSeq
 	a.checking = true
-	a.status = ui.StatusChecking
+	a.status = view.StatusChecking
 	a.win.SetChecking(true)
 	a.win.SetEditorBusy(manual)
 	a.win.ClearError()
@@ -135,12 +136,12 @@ func (a *App) finishCheck(seq uint64, rev uint64, manual bool, scope *checkScope
 		return
 	case res.Cancelled:
 		a.state.AbortCheck()
-		a.status = ui.StatusCancelled
+		a.status = view.StatusCancelled
 	default:
 		out := a.storeResult(rev, manual, scope, text, res)
-		a.status = ui.StatusIdle
+		a.status = view.StatusIdle
 		if out.Discarded {
-			a.status = ui.StatusDiscarded
+			a.status = view.StatusDiscarded
 		}
 		if manual {
 			a.recordMistakes(llmName, text, res.Placed)
@@ -190,7 +191,7 @@ func (a *App) storeResult(rev uint64, manual bool, scope *checkScope, text strin
 
 func (a *App) checkFailed(err error) {
 	logging.LogError(a.log, "check failed", err)
-	a.status = ui.StatusFailed
+	a.status = view.StatusFailed
 	a.win.ShowError(userMessage(err))
 	a.refreshStatus()
 }
@@ -248,7 +249,7 @@ func (a *App) refreshStatus() { a.win.SetStatus(a.statusText()) }
 
 // statusText is the left part of the status bar.
 func (a *App) statusText() string {
-	return ui.FormatStatus(a.status, a.state.Phase() == issues.Checked, len(a.state.Items()), a.unplaced)
+	return view.FormatStatus(a.status, a.state.Phase() == issues.Checked, len(a.state.Items()), a.unplaced)
 }
 
 // onStateChange redraws what depends on the issue state.

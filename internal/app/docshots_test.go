@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"os"
 	"path/filepath"
 	"strings"
@@ -107,7 +108,7 @@ func TestDocScreenshots(t *testing.T) {
 	shot("02-checked.png", window)
 
 	h.selectIssue(2) // "buyed"
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	h.waitFor("the header counts", func() bool { return strings.Contains(h.a.win.ExplanationHeader(), "you have made") })
 	shot("03-explanation.png", window)
 

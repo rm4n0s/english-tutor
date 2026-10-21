@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"time"
 
 	"github.com/mappu/miqt/qt6/mainthread"
@@ -9,7 +10,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/logging"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // renderInterval throttles how often a streaming explanation is re-rendered
@@ -61,7 +61,7 @@ func (a *App) onSelectionChanged() {
 	if !ok {
 		a.explainSeq++ // a result of the explanation that was running is stale now
 		a.explainer.Cancel()
-		a.win.SetExplanation(ui.ExplainIdle, "", "")
+		a.win.SetExplanation(view.ExplainIdle, "", "")
 		return
 	}
 	a.explain(sel, false)
@@ -82,7 +82,7 @@ func (a *App) explain(it issues.Item, regenerate bool) {
 	a.explainDirty = false
 	a.renderTimer.Stop()
 	a.explainHeader = it.Type.Label
-	a.win.SetExplanation(ui.ExplainLoading, a.explainHeader, "Explaining **"+it.Text+"**...")
+	a.win.SetExplanation(view.ExplainLoading, a.explainHeader, "Explaining **"+it.Text+"**...")
 	a.loadHeaderCounts(seq, it)
 
 	m, err := a.currentModel()
@@ -122,7 +122,7 @@ func (a *App) loadHeaderCounts(seq uint64, it issues.Item) {
 				logging.LogError(a.log, "reading statistics", err)
 				return
 			}
-			a.explainHeader = ui.FormatExplainHeader(it.Type.Label, c.Total, c.Last7, counted)
+			a.explainHeader = view.FormatExplainHeader(it.Type.Label, c.Total, c.Last7, counted)
 			a.win.SetExplanationHeader(a.explainHeader)
 		})
 	})
@@ -160,16 +160,16 @@ func (a *App) finishExplain(seq uint64, res analysis.ExplainResult, err error) {
 	case err != nil:
 		a.explainFailed(err)
 	case res.Cancelled:
-		a.win.SetExplanation(ui.ExplainCancelled, a.explainHeader, "")
+		a.win.SetExplanation(view.ExplainCancelled, a.explainHeader, "")
 	default:
 		a.addUsage(res.Usage)
-		a.win.SetExplanation(ui.ExplainReady, a.explainHeader, res.Markdown)
+		a.win.SetExplanation(view.ExplainReady, a.explainHeader, res.Markdown)
 	}
 }
 
 func (a *App) explainFailed(err error) {
 	logging.LogError(a.log, "explanation failed", err)
-	a.win.SetExplanation(ui.ExplainFailed, a.explainHeader, userMessage(err))
+	a.win.SetExplanation(view.ExplainFailed, a.explainHeader, userMessage(err))
 }
 
 // onIssueActivated is a double click on a row: the keyboard goes to the editor,

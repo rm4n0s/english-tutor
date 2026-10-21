@@ -1,4 +1,4 @@
-package ui
+package view
 
 import (
 	"slices"
@@ -114,7 +114,7 @@ func TestStatsCells(t *testing.T) {
 	defer func() { time.Local = loc }()
 	time.Local = time.UTC
 	got := StatsCells(ts("article", "grammar", 10, 4, 1, day(14)))
-	want := [statsColumnCount]string{"Article", "Grammar", "10", "1", "4", "2026-10-14"}
+	want := [StatsColumnCount]string{"Article", "Grammar", "10", "1", "4", "2026-10-14"}
 	if got != want {
 		t.Errorf("cells = %v, want %v", got, want)
 	}

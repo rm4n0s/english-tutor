@@ -1,14 +1,13 @@
 package web
 
 import (
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"html"
 	"html/template"
 	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // renderMarkdown turns an explanation written by an LLM into HTML.
@@ -16,7 +15,7 @@ import (
 // The text is untrusted (section 5.9 of the spec), so the renderer is small and
 // escapes first: every character that is not markdown syntax is HTML-escaped,
 // raw HTML in the text is shown as text, an image is shown as its alt text and
-// a link becomes an anchor only when ui.DecideLink would offer it (http or https
+// a link becomes an anchor only when view.DecideLink would offer it (http or https
 // with a host). It understands what the explanation prompt asks for:
 // paragraphs, headings, bold, italic, code, lists, quotes and rules.
 func renderMarkdown(md string) template.HTML {
@@ -159,7 +158,7 @@ func renderInline(s string) string {
 			i++
 		case c == '[':
 			if text, target, n, ok := parseLink(rest); ok {
-				if ui.DecideLink(target, false) == ui.LinkConfirm {
+				if view.DecideLink(target, false) == view.LinkConfirm {
 					shown := renderInline(text)
 					if strings.TrimSpace(text) == "" {
 						shown = html.EscapeString(target)

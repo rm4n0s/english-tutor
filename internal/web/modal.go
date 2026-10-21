@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 type modalKind int
@@ -529,16 +529,16 @@ func secondsOf(s int) time.Duration { return time.Duration(s) * time.Second }
 type statsView struct {
 	Tab      string // "mistakes" or "usage"
 	rows     []store.TypeStat
-	filter   ui.StatsFilter
-	sort     ui.StatsSort
+	filter   view.StatsFilter
+	sort     view.StatsSort
 	Selected string // the error type whose examples are shown
 	examples []store.Example
-	Usage    []ui.UsageRow
+	Usage    []view.UsageRow
 	Error    string
 }
 
 func (w *workspace) openStats() {
-	sv := &statsView{Tab: "mistakes", sort: ui.DefaultStatsSort}
+	sv := &statsView{Tab: "mistakes", sort: view.DefaultStatsSort}
 	if !w.loadStats(sv) {
 		return
 	}
@@ -562,7 +562,7 @@ func (w *workspace) loadStats(sv *statsView) bool {
 		}
 	}
 	sv.rows = rows
-	sv.Usage = ui.UsageRows(totals[0], totals[1], totals[2])
+	sv.Usage = view.UsageRows(totals[0], totals[1], totals[2])
 	return true
 }
 
@@ -610,10 +610,10 @@ func (w *workspace) statsFilter(category, period string) {
 // statsSort is a click on a column header.
 func (w *workspace) statsSort(col int) {
 	sv, ok := w.statsView()
-	if !ok || col < int(ui.ColType) || col > int(ui.ColLastSeen) {
+	if !ok || col < int(view.ColType) || col > int(view.ColLastSeen) {
 		return
 	}
-	sv.sort = ui.NextSort(sv.sort, ui.StatsColumn(col))
+	sv.sort = view.NextSort(sv.sort, view.StatsColumn(col))
 	sv.Selected, sv.examples = "", nil
 	w.touch(rModal)
 }

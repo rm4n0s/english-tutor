@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 type fakeDialogs struct {
@@ -668,7 +668,7 @@ func TestWindowStateIsConsistentAfterOpen(t *testing.T) {
 	fd.openPath, fd.openOK, fd.unsaved = writeFile(t, "a.txt", []byte("fresh")), true, UnsavedDiscard
 	onUI(func() { h.a.onOpen() })
 	onUI(func() {
-		if h.a.win.ExplanationState() != ui.ExplainIdle || h.a.win.SelectedIssueRow() != 0 || len(h.a.win.IssueRowIDs()) != 0 {
+		if h.a.win.ExplanationState() != view.ExplainIdle || h.a.win.SelectedIssueRow() != 0 || len(h.a.win.IssueRowIDs()) != 0 {
 			t.Errorf("panel %v, selected row %d, rows %v", h.a.win.ExplanationState(), h.a.win.SelectedIssueRow(), h.a.win.IssueRowIDs())
 		}
 	})

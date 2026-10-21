@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
 
 	qt "github.com/mappu/miqt/qt6"
@@ -221,7 +222,7 @@ func (f *LLMForm) keyVisible(on bool) {
 // updatePrivacyNote shows or hides the note about sending text to a server on
 // the internet.
 func (f *LLMForm) updatePrivacyNote() {
-	note := PrivacyNote(f.provider.CurrentText(), f.baseURL.Text())
+	note := view.PrivacyNote(f.provider.CurrentText(), f.baseURL.Text())
 	f.privacyNote.SetText(note)
 	f.privacyNote.SetVisible(note != "")
 }

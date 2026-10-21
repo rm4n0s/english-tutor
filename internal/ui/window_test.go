@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"slices"
 	"strings"
 	"testing"
@@ -87,11 +88,11 @@ func TestLayout(t *testing.T) {
 		}
 		for _, c := range analysis.Categories() {
 			b := w.legend[c]
-			if b == nil || !b.IsChecked() || !strings.Contains(b.Text(), c.Label()) || !strings.Contains(b.Text(), CategorySample(c)) {
+			if b == nil || !b.IsChecked() || !strings.Contains(b.Text(), c.Label()) || !strings.Contains(b.Text(), view.CategorySample(c)) {
 				t.Errorf("legend entry for %s is wrong", c)
 				continue
 			}
-			if !strings.Contains(b.StyleSheet(), CategoryColor(c, false)) && !strings.Contains(b.StyleSheet(), CategoryColor(c, true)) {
+			if !strings.Contains(b.StyleSheet(), view.CategoryColor(c, false)) && !strings.Contains(b.StyleSheet(), view.CategoryColor(c, true)) {
 				t.Errorf("legend entry for %s does not use its colour: %s", c, b.StyleSheet())
 			}
 		}
@@ -131,7 +132,7 @@ func TestSetLLMs(t *testing.T) {
 
 func TestSetLLMsDoesNotOverwriteAnExplanation(t *testing.T) {
 	withWindow(t, func(w *MainWindow) {
-		w.SetExplanation(ExplainReady, "Verb form", "### What is wrong\nUse goes.")
+		w.SetExplanation(view.ExplainReady, "Verb form", "### What is wrong\nUse goes.")
 		w.SetLLMs(choices(), 3)
 		if got := w.explain.ToPlainText(); !strings.Contains(got, "Use goes.") {
 			t.Errorf("panel = %q: changing the LLM list must not replace an explanation", got)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"io"
 	"slices"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/llm/llmtest"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 func explainReply() llmtest.Reply {
@@ -36,14 +36,14 @@ func (h *harness) selectIssue(id int) {
 	onUI(func() { h.a.state.Select(id) })
 }
 
-func (h *harness) panel() (st ui.ExplainState, header, body string) {
+func (h *harness) panel() (st view.ExplainState, header, body string) {
 	onUI(func() {
 		st, header, body = h.a.win.ExplanationState(), h.a.win.ExplanationHeader(), h.a.win.ExplanationText()
 	})
 	return st, header, body
 }
 
-func (h *harness) waitPanel(want ui.ExplainState) {
+func (h *harness) waitPanel(want view.ExplainState) {
 	h.t.Helper()
 	h.waitFor("the panel state", func() bool { return h.a.win.ExplanationState() == want })
 }
@@ -116,16 +116,16 @@ func TestSelectingAnIssueExplainsIt(t *testing.T) {
 
 	onUI(func() {
 		st, hdr, _ := h.a.win.ExplanationState(), h.a.win.ExplanationHeader(), ""
-		if st != ui.ExplainLoading || hdr == "" {
+		if st != view.ExplainLoading || hdr == "" {
 			t.Errorf("right after selecting: state %v, header %q", st, hdr)
 		}
 		if !h.a.win.ExplanationProgressShown() {
 			t.Error("the busy indicator should show while loading")
 		}
 	})
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	st, header, body := h.panel()
-	if st != ui.ExplainReady || !strings.Contains(body, "Use goes.") || !strings.Contains(body, "Third person singular.") {
+	if st != view.ExplainReady || !strings.Contains(body, "Use goes.") || !strings.Contains(body, "Third person singular.") {
 		t.Errorf("state %v, body %q", st, body)
 	}
 	h.waitFor("the header counts", func() bool { return strings.Contains(h.a.win.ExplanationHeader(), "you have made this mistake 1 time") })
@@ -155,16 +155,16 @@ func TestExplanationIsCachedUntilRegenerated(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 
 	onUI(func() {
 		h.a.state.ClearSelection()
-		if h.a.win.ExplanationState() != ui.ExplainIdle {
+		if h.a.win.ExplanationState() != view.ExplainIdle {
 			t.Error("clearing the selection returns the panel to idle")
 		}
 		h.a.state.Select(1)
 	})
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	if n := len(fake.Calls()); n != 2 {
 		t.Errorf("calls = %d: re-selecting must show the cached explanation", n)
 	}
@@ -174,7 +174,7 @@ func TestExplanationIsCachedUntilRegenerated(t *testing.T) {
 	if n := len(fake.Calls()); n != 3 {
 		t.Errorf("calls = %d, want a new request for Regenerate", n)
 	}
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 }
 
 func TestExplanationFailureAndRetry(t *testing.T) {
@@ -182,9 +182,9 @@ func TestExplanationFailureAndRetry(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainFailed)
+	h.waitPanel(view.ExplainFailed)
 	st, _, body := h.panel()
-	if st != ui.ExplainFailed || !strings.Contains(body, "The request to local failed") {
+	if st != view.ExplainFailed || !strings.Contains(body, "The request to local failed") {
 		t.Errorf("state %v, body %q", st, body)
 	}
 	onUI(func() {
@@ -197,7 +197,7 @@ func TestExplanationFailureAndRetry(t *testing.T) {
 	}
 
 	onUI(func() { h.a.win.ClickExplainButton("redo") })
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	if _, _, body := h.panel(); !strings.Contains(body, "Second try works.") {
 		t.Errorf("body = %q", body)
 	}
@@ -215,7 +215,7 @@ func TestCancellingAnExplanation(t *testing.T) {
 		}
 		h.a.win.ClickExplainButton("cancel")
 	})
-	h.waitPanel(ui.ExplainCancelled)
+	h.waitPanel(view.ExplainCancelled)
 	onUI(func() {
 		redo, cancel, notAnError := h.a.win.ExplanationButtons()
 		if redo != "Regenerate" || cancel || !notAnError {
@@ -240,10 +240,10 @@ func TestSelectingAnotherIssueReplacesTheExplanation(t *testing.T) {
 	h.selectIssue(1)
 	h.waitFor("the first request", func() bool { return len(fake.Calls()) == 2 })
 	h.selectIssue(2)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	time.Sleep(50 * time.Millisecond) // the first one reports its cancellation meanwhile
 	st, _, body := h.panel()
-	if st != ui.ExplainReady || !strings.Contains(body, "explanation of the second issue") {
+	if st != view.ExplainReady || !strings.Contains(body, "explanation of the second issue") {
 		t.Errorf("state %v, body %q: the older explanation must not overwrite the newer one", st, body)
 	}
 }
@@ -255,7 +255,7 @@ func TestEditingTheSelectedIssueResetsThePanel(t *testing.T) {
 	h.selectIssue(1)
 	h.waitFor("the request", func() bool { return len(fake.Calls()) == 2 })
 	onUI(func() { h.a.win.InsertTextAt(2, "x") }) // inside the first issue
-	h.waitPanel(ui.ExplainIdle)
+	h.waitPanel(view.ExplainIdle)
 	onUI(func() {
 		if !slices.Equal(h.a.win.IssueRowIDs(), []int{2}) {
 			t.Errorf("rows = %v: the row of an edited issue disappears at once", h.a.win.IssueRowIDs())
@@ -270,7 +270,7 @@ func TestExplainWithoutAnLLMFailsWithAMessage(t *testing.T) {
 	onUI(func() {
 		h.a.win.SetLLMs(nil, 0)
 		h.a.state.Select(1)
-		if h.a.win.ExplanationState() != ui.ExplainFailed {
+		if h.a.win.ExplanationState() != view.ExplainFailed {
 			t.Errorf("state = %v", h.a.win.ExplanationState())
 		}
 	})
@@ -288,7 +288,7 @@ func TestListSelectionMovesTheCursorAndStartsTheExplanation(t *testing.T) {
 		if h.a.win.CursorPosition() != 12 || h.a.win.SelectedIssueRow() != 2 {
 			t.Errorf("cursor %d, selected row %d", h.a.win.CursorPosition(), h.a.win.SelectedIssueRow())
 		}
-		if h.a.win.ExplanationState() != ui.ExplainLoading {
+		if h.a.win.ExplanationState() != view.ExplainLoading {
 			t.Errorf("state = %v", h.a.win.ExplanationState())
 		}
 		us := h.a.win.Underlines()
@@ -296,7 +296,7 @@ func TestListSelectionMovesTheCursorAndStartsTheExplanation(t *testing.T) {
 			t.Errorf("underlines = %+v", us)
 		}
 	})
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 }
 
 func TestSelectingInTheTextSelectsTheRow(t *testing.T) {
@@ -313,7 +313,7 @@ func TestSelectingInTheTextSelectsTheRow(t *testing.T) {
 			t.Error("moving out of the issue clears the row selection")
 		}
 	})
-	h.waitPanel(ui.ExplainIdle)
+	h.waitPanel(view.ExplainIdle)
 }
 
 func TestDoubleClickMovesTheKeyboardToTheEditor(t *testing.T) {
@@ -334,14 +334,14 @@ func TestNotAnErrorRemovesTheIssueAndItsCount(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 
 	onUI(func() { h.a.win.ClickExplainButton("notanerror") })
 	onUI(func() {
 		if !slices.Equal(h.a.win.IssueRowIDs(), []int{2}) || len(h.a.win.Underlines()) != 1 {
 			t.Errorf("rows %v, underlines %+v", h.a.win.IssueRowIDs(), h.a.win.Underlines())
 		}
-		if h.a.win.ExplanationState() != ui.ExplainIdle {
+		if h.a.win.ExplanationState() != view.ExplainIdle {
 			t.Errorf("panel state = %v", h.a.win.ExplanationState())
 		}
 	})
@@ -382,7 +382,7 @@ func TestRegenerateFromTheContextMenu(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	onUI(func() { h.a.win.TriggerIssueMenu("Regenerate explanation") })
 	h.waitFor("the new explanation", func() bool { return strings.Contains(h.a.win.ExplanationText(), "again") })
 }
@@ -417,7 +417,7 @@ func TestStreamingRendersThrottled(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	_, _, body := h.panel()
 	if want := strings.TrimSpace(strings.Join(chunks, "")); !strings.Contains(strings.Join(strings.Fields(body), " "), want[:20]) {
 		t.Errorf("body = %q", body)
@@ -429,11 +429,11 @@ func TestNewResultClearsSelectionAndExplanation(t *testing.T) {
 	h := newHarness(t, fake)
 	h.checked(fake)
 	h.selectIssue(1)
-	h.waitPanel(ui.ExplainReady)
+	h.waitPanel(view.ExplainReady)
 	h.checkButton()
 	h.waitIdle()
 	onUI(func() {
-		if h.a.win.ExplanationState() != ui.ExplainIdle || h.a.win.SelectedIssueRow() != 0 {
+		if h.a.win.ExplanationState() != view.ExplainIdle || h.a.win.SelectedIssueRow() != 0 {
 			t.Errorf("state %v, selected row %d: a new result clears the selection", h.a.win.ExplanationState(), h.a.win.SelectedIssueRow())
 		}
 	})

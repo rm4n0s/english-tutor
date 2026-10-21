@@ -1,4 +1,4 @@
-package ui
+package view
 
 import (
 	"fmt"
@@ -21,10 +21,10 @@ const (
 	ColLast7
 	ColLast30
 	ColLastSeen
-	statsColumnCount
+	StatsColumnCount
 )
 
-var statsColumnTitles = [statsColumnCount]string{"Error type", "Category", "Total", "Last 7 days", "Last 30 days", "Last seen"}
+var StatsColumnTitles = [StatsColumnCount]string{"Error type", "Category", "Total", "Last 7 days", "Last 30 days", "Last seen"}
 
 // StatsFilter is the category filter and the period selector of the dialog.
 type StatsFilter struct {
@@ -112,8 +112,8 @@ func StatsTypeLabel(id string) string {
 func statsCategoryLabel(category string) string { return analysis.Category(category).Label() }
 
 // StatsCells returns the text of each cell of a row.
-func StatsCells(r store.TypeStat) [statsColumnCount]string {
-	return [statsColumnCount]string{
+func StatsCells(r store.TypeStat) [StatsColumnCount]string {
+	return [StatsColumnCount]string{
 		ColType:     StatsTypeLabel(r.ErrorType),
 		ColCategory: statsCategoryLabel(r.Category),
 		ColTotal:    fmt.Sprintf("%d", r.Total),

@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"strings"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // renderInterval throttles how often a streaming explanation is sent to the
@@ -38,7 +38,7 @@ func (w *workspace) startCheck(manual bool) {
 	text := w.text
 	if strings.TrimSpace(text) == "" {
 		if manual {
-			w.status = ui.StatusIdle
+			w.status = view.StatusIdle
 			w.notice = "Nothing to check yet. Write some text first."
 			w.touch(rStatus)
 		}
@@ -57,7 +57,7 @@ func (w *workspace) startCheck(manual bool) {
 	w.checkSeq++
 	seq := w.checkSeq
 	w.checking = true
-	w.status = ui.StatusChecking
+	w.status = view.StatusChecking
 	w.notice = ""
 	w.banner = ""
 	w.touch(rToolbar | rBanner | rStatus)
@@ -93,14 +93,14 @@ func (w *workspace) finishCheck(seq, rev uint64, manual bool, llmName, text stri
 		return
 	case res.Cancelled:
 		w.state.AbortCheck()
-		w.status = ui.StatusCancelled
+		w.status = view.StatusCancelled
 	default:
 		out := w.state.FinishCheck(rev, issues.FromPlaced(text, res.Placed))
 		w.unplaced = res.Unplaced
 		w.resultRecorded = manual
-		w.status = ui.StatusIdle
+		w.status = view.StatusIdle
 		if out.Discarded {
-			w.status = ui.StatusDiscarded
+			w.status = view.StatusDiscarded
 		}
 		if manual {
 			w.recordMistakes(llmName, text, res.Placed)
@@ -110,7 +110,7 @@ func (w *workspace) finishCheck(seq, rev uint64, manual bool, llmName, text stri
 
 func (w *workspace) checkFailed(err error) {
 	w.logError("check failed", err)
-	w.status = ui.StatusFailed
+	w.status = view.StatusFailed
 	w.banner = userMessage(err)
 	w.touch(rBanner | rStatus | rToolbar)
 }
@@ -201,7 +201,7 @@ func (w *workspace) onSelectionChanged() {
 	if !ok {
 		w.explainSeq++ // a result of the explanation that was running is stale now
 		w.explainer.Cancel()
-		w.explainState = ui.ExplainIdle
+		w.explainState = view.ExplainIdle
 		w.explainBody, w.explainHeader = "", ""
 		w.touch(rExplain)
 		return
@@ -217,7 +217,7 @@ func (w *workspace) explain(it issues.Item, regenerate bool) {
 	w.explainBuf.Reset()
 	w.explainHeader = it.Type.Label
 	w.explainTitle = it.Text
-	w.explainState = ui.ExplainLoading
+	w.explainState = view.ExplainLoading
 	w.explainBody = ""
 	w.touch(rExplain)
 	w.loadHeaderCounts(seq, it)
@@ -256,7 +256,7 @@ func (w *workspace) explain(it issues.Item, regenerate bool) {
 		w.finishExplain(seq, res, err)
 	})
 	if !started {
-		w.explainState = ui.ExplainIdle
+		w.explainState = view.ExplainIdle
 	}
 }
 
@@ -275,7 +275,7 @@ func (w *workspace) loadHeaderCounts(seq uint64, it issues.Item) {
 			w.logError("reading statistics", err)
 			return
 		}
-		w.explainHeader = ui.FormatExplainHeader(it.Type.Label, c.Total, c.Last7, counted)
+		w.explainHeader = view.FormatExplainHeader(it.Type.Label, c.Total, c.Last7, counted)
 		w.touch(rExplain)
 	})
 }
@@ -288,12 +288,12 @@ func (w *workspace) finishExplain(seq uint64, res analysis.ExplainResult, err er
 	case err != nil:
 		w.explainFailed(err)
 	case res.Cancelled:
-		w.explainState = ui.ExplainCancelled
+		w.explainState = view.ExplainCancelled
 		w.explainBody = ""
 		w.touch(rExplain)
 	default:
 		w.addUsage(res.Usage)
-		w.explainState = ui.ExplainReady
+		w.explainState = view.ExplainReady
 		w.explainBody = res.Markdown
 		w.touch(rExplain)
 	}
@@ -301,7 +301,7 @@ func (w *workspace) finishExplain(seq uint64, res analysis.ExplainResult, err er
 
 func (w *workspace) explainFailed(err error) {
 	w.logError("explanation failed", err)
-	w.explainState = ui.ExplainFailed
+	w.explainState = view.ExplainFailed
 	w.explainBody = userMessage(err)
 	w.touch(rExplain)
 }

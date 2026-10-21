@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rm4n0s/errors"
 
@@ -87,7 +89,7 @@ func withStats(t *testing.T, b *fakeStats, f func(d *StatisticsDialog, resets *i
 	})
 }
 
-func column(d *StatisticsDialog, c StatsColumn) []string {
+func column(d *StatisticsDialog, c view.StatsColumn) []string {
 	var out []string
 	for r := range d.table.RowCount() {
 		out = append(out, d.table.Item(r, int(c)).Text())
@@ -97,20 +99,20 @@ func column(d *StatisticsDialog, c StatsColumn) []string {
 
 func TestStatisticsShowsTheMistakesTable(t *testing.T) {
 	withStats(t, newFakeStats(), func(d *StatisticsDialog, _ *int, _ *[]error) {
-		if got := column(d, ColType); !slices.Equal(got, []string{"Article", "Spelling", "Verb tense", "Word order"}) {
+		if got := column(d, view.ColType); !slices.Equal(got, []string{"Article", "Spelling", "Verb tense", "Word order"}) {
 			t.Errorf("types = %v: sorted by Total, highest first", got)
 		}
-		if got := column(d, ColTotal); !slices.Equal(got, []string{"10", "6", "6", "2"}) {
+		if got := column(d, view.ColTotal); !slices.Equal(got, []string{"10", "6", "6", "2"}) {
 			t.Errorf("totals = %v", got)
 		}
-		if got := column(d, ColCategory); !slices.Equal(got, []string{"Grammar", "Vocabulary", "Grammar", "Syntax"}) {
+		if got := column(d, view.ColCategory); !slices.Equal(got, []string{"Grammar", "Vocabulary", "Grammar", "Syntax"}) {
 			t.Errorf("categories = %v", got)
 		}
 		if d.summary.Text() != "24 mistakes in all time. Most frequent: Article." {
 			t.Errorf("summary = %q", d.summary.Text())
 		}
 		headers := []string{}
-		for c := range int(statsColumnCount) {
+		for c := range int(view.StatsColumnCount) {
 			headers = append(headers, d.table.HorizontalHeaderItem(c).Text())
 		}
 		if !slices.Equal(headers, []string{"Error type", "Category", "Total", "Last 7 days", "Last 30 days", "Last seen"}) {
@@ -122,19 +124,19 @@ func TestStatisticsShowsTheMistakesTable(t *testing.T) {
 func TestStatisticsFilters(t *testing.T) {
 	withStats(t, newFakeStats(), func(d *StatisticsDialog, _ *int, _ *[]error) {
 		d.period.SetCurrentIndex(2) // last 7 days
-		if got := column(d, ColType); !slices.Equal(got, []string{"Article", "Spelling"}) {
+		if got := column(d, view.ColType); !slices.Equal(got, []string{"Article", "Spelling"}) {
 			t.Errorf("7 days: %v", got)
 		}
 		if d.summary.Text() != "4 mistakes in the last 7 days. Most frequent: Spelling." {
 			t.Errorf("summary = %q", d.summary.Text())
 		}
 		d.category.SetCurrentIndex(1) // grammar
-		if got := column(d, ColType); !slices.Equal(got, []string{"Article"}) {
+		if got := column(d, view.ColType); !slices.Equal(got, []string{"Article"}) {
 			t.Errorf("7 days, grammar: %v", got)
 		}
 		d.period.SetCurrentIndex(0)
 		d.category.SetCurrentIndex(0)
-		if len(column(d, ColType)) != 4 {
+		if len(column(d, view.ColType)) != 4 {
 			t.Error("clearing the filters shows every row again")
 		}
 	})
@@ -143,23 +145,23 @@ func TestStatisticsFilters(t *testing.T) {
 func TestStatisticsSortByClickingAHeader(t *testing.T) {
 	withStats(t, newFakeStats(), func(d *StatisticsDialog, _ *int, _ *[]error) {
 		header := d.table.HorizontalHeader()
-		header.SectionClicked(int(ColType))
-		if got := column(d, ColType); !slices.Equal(got, []string{"Article", "Spelling", "Verb tense", "Word order"}) {
+		header.SectionClicked(int(view.ColType))
+		if got := column(d, view.ColType); !slices.Equal(got, []string{"Article", "Spelling", "Verb tense", "Word order"}) {
 			t.Errorf("type ascending: %v", got)
 		}
-		header.SectionClicked(int(ColType))
-		if got := column(d, ColType); !slices.Equal(got, []string{"Word order", "Verb tense", "Spelling", "Article"}) {
+		header.SectionClicked(int(view.ColType))
+		if got := column(d, view.ColType); !slices.Equal(got, []string{"Word order", "Verb tense", "Spelling", "Article"}) {
 			t.Errorf("type descending: %v", got)
 		}
-		header.SectionClicked(int(ColLast7))
-		if got := column(d, ColType); got[0] != "Spelling" {
+		header.SectionClicked(int(view.ColLast7))
+		if got := column(d, view.ColType); got[0] != "Spelling" {
 			t.Errorf("last 7 days, most first: %v", got)
 		}
-		header.SectionClicked(int(ColLastSeen))
-		if got := column(d, ColType); got[0] != "Spelling" || got[len(got)-1] != "Word order" {
+		header.SectionClicked(int(view.ColLastSeen))
+		if got := column(d, view.ColType); got[0] != "Spelling" || got[len(got)-1] != "Word order" {
 			t.Errorf("last seen, newest first: %v", got)
 		}
-		if d.sort != (StatsSort{Column: ColLastSeen, Descending: true}) {
+		if d.sort != (view.StatsSort{Column: view.ColLastSeen, Descending: true}) {
 			t.Errorf("sort = %+v", d.sort)
 		}
 	})
@@ -293,4 +295,17 @@ func TestStatisticsKeepsRowsAfterAFailedReset(t *testing.T) {
 			t.Errorf("rows = %d: a failed reset leaves the table as it was", d.table.RowCount())
 		}
 	})
+}
+
+func ts(id, category string, total, last30, last7 int, seen time.Time) store.TypeStat {
+	return store.TypeStat{ErrorType: id, Category: category, Total: total, Last30: last30, Last7: last7, LastSeen: seen}
+}
+
+func sampleStats() []store.TypeStat {
+	return []store.TypeStat{
+		ts("article", "grammar", 10, 4, 1, day(14)),
+		ts("spelling", "vocabulary", 6, 6, 3, day(15)),
+		ts("word_order", "syntax", 2, 0, 0, day(1)),
+		ts("verb_tense", "grammar", 6, 2, 0, day(10)),
+	}
 }

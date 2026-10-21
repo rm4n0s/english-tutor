@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/rm4n0s/english-tutor/internal/view"
 	"path/filepath"
 	"strings"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
-	"github.com/rm4n0s/english-tutor/internal/ui"
 )
 
 // appTitle is the name shown in the window title.
@@ -83,14 +83,14 @@ func (a *App) resetText(text string) {
 	a.win.SetChecking(false)
 	a.win.SetEditorBusy(false)
 	a.autoTimer.Stop()
-	a.status = ui.StatusIdle
+	a.status = view.StatusIdle
 	a.unplaced = 0
 	a.resultRecorded = false
 	a.state.Reset()
 	a.win.ClearError()
 	a.win.LoadText(text)
 	a.autoTimer.Stop() // loading a text is not typing
-	a.win.SetExplanation(ui.ExplainIdle, "", "")
+	a.win.SetExplanation(view.ExplainIdle, "", "")
 	a.refreshStatus()
 }
 
