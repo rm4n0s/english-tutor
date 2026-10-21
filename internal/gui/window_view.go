@@ -20,6 +20,7 @@ import (
 func (w *MainWindow) Widget() widgets.Widget {
 	return m.NewListenableBuilder(w.redraw, func(bc widgets.BuildContext, _ widgets.Widget) widgets.Widget {
 		w.prefersDark = isDark(bc)
+		w.navCtx = bc
 		return w.withShortcuts(m.NewScaffold(m.ScaffoldOpts{Body: w.content(bc)}))
 	}, nil)
 }
@@ -85,7 +86,16 @@ func (w *MainWindow) content(bc widgets.BuildContext) widgets.Widget {
 			w.leftPane(bc),
 			w.vSplit.Widget(w.issuesPane(bc), w.explainPane(bc)))),
 		w.statusBar(bc))
-	return m.NewColumn(rows, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch})
+	page := m.NewColumn(rows, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch})
+	if len(w.panels) == 0 {
+		return page
+	}
+	layers := []widgets.Widget{page}
+	for _, p := range w.panels {
+		layers = append(layers, m.NewPositioned(m.NewSizedBox(p.Build(bc), m.SizedBoxOpts{Width: foundation.Some(440.0), Height: foundation.Some(420.0)}),
+			m.PositionedOpts{Right: foundation.Some(16.0), Bottom: foundation.Some(36.0)}))
+	}
+	return m.NewStack(layers, m.StackOpts{Fit: rendering.StackFitExpand})
 }
 
 // ---- Toolbars ----

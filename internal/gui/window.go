@@ -143,6 +143,8 @@ type MainWindow struct {
 	prefersDark   bool
 	explainScroll widgets.ScrollController
 	listFocus     *widgets.FocusNode
+	navCtx        widgets.BuildContext // under the navigator that shows the dialogs
+	panels        []panel              // floating windows that are not modal
 	recognizers   []*gestures.TapGestureRecognizer
 
 	status string
@@ -711,4 +713,31 @@ func parseSize(s string) ([2]int, bool) {
 		return [2]int{}, false
 	}
 	return [2]int{x, y}, true
+}
+
+// panel is a floating window that does not block the main window.
+type panel interface {
+	Build(bc widgets.BuildContext) widgets.Widget
+	onClosed()
+}
+
+// showPanel puts p over the corner of the window.
+func (w *MainWindow) showPanel(p panel) {
+	w.panels = append(w.panels, p)
+	if d, ok := p.(*AlternativesDialog); ok {
+		d.open = true
+	}
+	w.refresh()
+}
+
+// hidePanel takes p away and tells it.
+func (w *MainWindow) hidePanel(p panel) {
+	for i, q := range w.panels {
+		if q == p {
+			w.panels = append(w.panels[:i], w.panels[i+1:]...)
+			break
+		}
+	}
+	p.onClosed()
+	w.refresh()
 }
