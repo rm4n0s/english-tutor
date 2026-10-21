@@ -326,21 +326,39 @@ func TestSplitterSizesRoundTripAndDrag(t *testing.T) {
 	}
 }
 
-func TestCloseAsksAndReports(t *testing.T) {
+func TestCloseGoesToTheApplication(t *testing.T) {
 	_, w := pumpWindow(t)
-	var closed int
-	allow := false
-	w.SetHandlers(Handlers{CanClose: func() bool { return allow }, Closed: func() { closed++ }})
-	if w.Close() || !w.Visible() || closed != 0 {
-		t.Error("a refused close keeps the window and reports nothing")
+	var requested int
+	w.SetHandlers(Handlers{CloseRequested: func() { requested++ }})
+	w.Close()
+	if requested != 1 || w.Quitting() {
+		t.Errorf("requested %d quitting %v", requested, w.Quitting())
 	}
-	allow = true
-	if !w.Close() || w.Visible() || closed != 1 {
-		t.Errorf("close: visible %v, closed %d", w.Visible(), closed)
+	if resp := w.onExitRequested(); resp != ui.AppExitResponseCancel || requested != 2 {
+		t.Errorf("the close button must wait for the application: %v, requested %d", resp, requested)
+	}
+	w.Hide()
+	if w.Visible() {
+		t.Error("Hide takes the window off the screen")
 	}
 	w.Present()
 	if !w.Visible() || !w.IsActive() {
 		t.Error("Present shows the window again")
+	}
+	w.Exit()
+	if !w.Quitting() || w.onExitRequested() != ui.AppExitResponseExit {
+		t.Error("after Exit the window lets the application end")
+	}
+}
+
+func TestCloseWithoutAHandlerEndsTheApplication(t *testing.T) {
+	_, w := pumpWindow(t)
+	if w.onExitRequested() != ui.AppExitResponseExit {
+		t.Error("with no handler the close button ends the application")
+	}
+	w.Close()
+	if !w.Quitting() {
+		t.Error("Close without a handler exits")
 	}
 }
 

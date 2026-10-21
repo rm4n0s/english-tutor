@@ -7,6 +7,7 @@ import (
 
 	"github.com/rm4n0s/glutter/foundation"
 	"github.com/rm4n0s/glutter/gestures"
+	"github.com/rm4n0s/glutter/ui"
 	"github.com/rm4n0s/glutter/widgets"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
@@ -66,12 +67,11 @@ type Handlers struct {
 	// a streaming explanation.
 	NotAnError, Regenerate, ExplainCancel func()
 
-	// CanClose is asked when the user closes the window; returning false keeps
-	// it open (for the unsaved-changes prompt).
-	CanClose func() bool
-	// Closed is called once the window has been told to close, before it goes
-	// away (or, with a tray icon, is hidden), to save the window state.
-	Closed func()
+	// CloseRequested is called when the user closes the window (or the desktop
+	// asks it to close). The application decides: it hides the window (Hide),
+	// ends the application (Exit) after asking about unsaved changes, or does
+	// nothing. Without it the application ends.
+	CloseRequested func()
 }
 
 // Hints shown in the explanation panel when it has no explanation.
@@ -160,10 +160,10 @@ type MainWindow struct {
 	vSplit *splitter
 	size   [2]int // the window size in logical pixels, as saved
 
-	visible bool
-	active  bool
-	alerted int
-	closed  bool
+	visible  bool
+	active   bool
+	alerted  int
+	quitting bool
 }
 
 // NewMainWindow builds the window. Pass the runtime that makes it run on the UI
@@ -266,26 +266,64 @@ func (w *MainWindow) SetHandlers(h Handlers) { w.handlers = h }
 // ---- Window ----
 
 // Show shows the window.
-func (w *MainWindow) Show() { w.visible, w.closed = true, false; w.refresh() }
+func (w *MainWindow) Show() { w.visible = true; w.refresh() }
 
 // Present brings the window to the front: it shows it if it is hidden, restores
 // it if it is minimised and asks the desktop to focus it.
-func (w *MainWindow) Present() { w.visible, w.active, w.closed = true, true, false; w.refresh() }
+func (w *MainWindow) Present() {
+	w.visible, w.active = true, true
+	if c := w.windowController(); c != nil {
+		c.SetMinimized(false)
+	}
+	w.refresh()
+}
 
 // Visible reports whether the window is shown.
-func (w *MainWindow) Visible() bool { return w.visible && !w.closed }
+func (w *MainWindow) Visible() bool { return w.visible }
 
-// Close closes the window as if the user had closed it. It reports whether the
-// window closed: the unsaved-changes question can keep it open.
-func (w *MainWindow) Close() bool {
-	if w.handlers.CanClose != nil && !w.handlers.CanClose() {
-		return false
+// Close asks the window to close, as the user's close button does: the
+// application's CloseRequested handler decides what happens. Without one the
+// application ends.
+func (w *MainWindow) Close() {
+	if w.handlers.CloseRequested != nil {
+		w.handlers.CloseRequested()
+		return
 	}
-	call(w.handlers.Closed)
-	w.closed = true
+	w.Exit()
+}
+
+// Hide takes the window off the screen: it is minimized, and Present brings it
+// back. The application goes on.
+func (w *MainWindow) Hide() {
 	w.visible = false
+	if c := w.windowController(); c != nil {
+		c.SetMinimized(true)
+	}
 	w.refresh()
-	return true
+}
+
+// Exit ends the application.
+func (w *MainWindow) Exit() {
+	w.quitting = true
+	w.visible = false
+	if w.rt != nil {
+		if b := w.rt.Binding(); b != nil {
+			b.ExitApplication(ui.AppExitTypeRequired)
+		}
+	}
+}
+
+// Quitting reports whether Exit was called.
+func (w *MainWindow) Quitting() bool { return w.quitting }
+
+// windowController returns the controller of the window of the app, or nil
+// before it runs.
+func (w *MainWindow) windowController() *widgets.RegularWindowController {
+	if w.rt == nil || w.rt.Binding() == nil {
+		return nil
+	}
+	c, _ := w.rt.Binding().WindowingOwner().ImplicitWindowController()
+	return c
 }
 
 // SetTitle sets the window title.
@@ -296,7 +334,7 @@ func (w *MainWindow) Title() string { return w.title }
 
 // IsActive reports whether the window is the one the user is working in. It is
 // false when another application has the focus and when the window is hidden.
-func (w *MainWindow) IsActive() bool { return w.active && w.Visible() }
+func (w *MainWindow) IsActive() bool { return w.active && w.visible }
 
 // SetActive records that the desktop gave or took the focus of the window.
 func (w *MainWindow) SetActive(active bool) { w.active = active }

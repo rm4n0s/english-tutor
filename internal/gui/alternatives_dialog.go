@@ -57,7 +57,7 @@ type AlternativesDialog struct {
 func NewAlternativesDialog(win *MainWindow, selected string, hooks AlternativesHooks) *AlternativesDialog {
 	d := &AlternativesDialog{dialogBase: newDialogBase(), win: win, hooks: hooks, selection: ShortSelection(selected), row: -1}
 	d.copyText = func(text string) {
-		if win.rt != nil {
+		if win.rt != nil && win.rt.Binding() != nil {
 			win.rt.Binding().Clipboard().SetData(context.Background(), services.NewClipboardData(text), func(err error) {
 				if err != nil {
 					win.ShowError("Could not copy: " + err.Error())

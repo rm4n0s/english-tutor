@@ -21,6 +21,9 @@ func (w *MainWindow) Widget() widgets.Widget {
 	return m.NewListenableBuilder(w.redraw, func(bc widgets.BuildContext, _ widgets.Widget) widgets.Widget {
 		w.prefersDark = isDark(bc)
 		w.navCtx = bc
+		if size := m.MediaQuerySizeOf(bc); size.Width > 0 && size.Height > 0 {
+			w.size = [2]int{int(size.Width), int(size.Height)}
+		}
 		return w.withShortcuts(m.NewScaffold(m.ScaffoldOpts{Body: w.content(bc)}))
 	}, nil)
 }
@@ -406,4 +409,43 @@ func selectedEdge(selected bool, theme *m.ThemeData) ui.Color {
 		return theme.ColorScheme.Primary()
 	}
 	return ui.NewColor(0x00000000)
+}
+
+// lifecycle puts the handling of the close button around child: the window asks
+// the application what to do instead of closing.
+func (w *MainWindow) lifecycle(_ widgets.BuildContext, child widgets.Widget) widgets.Widget {
+	return &lifecycleHost{StatefulWidget: widgets.NewStatefulWidgetBase(), win: w, child: child}
+}
+
+type lifecycleHost struct {
+	widgets.StatefulWidget
+	win   *MainWindow
+	child widgets.Widget
+}
+
+func (h *lifecycleHost) CreateState() widgets.State { return &lifecycleState{} }
+
+type lifecycleState struct {
+	widgets.StateOf[*lifecycleHost]
+	listener *widgets.AppLifecycleListener
+}
+
+func (s *lifecycleState) InitState() {
+	s.listener = widgets.NewAppLifecycleListener(widgets.WidgetsBindingOf(s.Context()), widgets.AppLifecycleListenerOpts{
+		OnExitRequested: s.Widget().win.onExitRequested,
+	})
+}
+
+func (s *lifecycleState) Dispose() { s.listener.Dispose() }
+
+func (s *lifecycleState) Build(widgets.BuildContext) widgets.Widget { return s.Widget().child }
+
+// onExitRequested is the close button. The application decides; the window stays
+// unless it calls Exit.
+func (w *MainWindow) onExitRequested() ui.AppExitResponse {
+	if w.quitting || w.handlers.CloseRequested == nil {
+		return ui.AppExitResponseExit
+	}
+	w.handlers.CloseRequested()
+	return ui.AppExitResponseCancel
 }

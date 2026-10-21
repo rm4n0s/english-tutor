@@ -246,7 +246,7 @@ func (w *MainWindow) onLink(raw string) {
 // linkRecognizer makes a recognizer for a link, to be disposed with the next
 // build of the body. It is nil when the window has no runtime.
 func (w *MainWindow) linkRecognizer(raw string) gestures.GestureRecognizer {
-	if w.rt == nil {
+	if w.rt == nil || w.rt.Binding() == nil {
 		return nil
 	}
 	r := gestures.NewTapGestureRecognizer(w.rt.Binding().Gestures())
