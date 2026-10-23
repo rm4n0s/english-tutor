@@ -15,6 +15,7 @@ import (
 	"github.com/rm4n0s/glutter/widgets"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/store"
 	"github.com/rm4n0s/english-tutor/internal/view"
 )
 
@@ -74,7 +75,7 @@ type Editor struct {
 	units     *analysis.UTF16Map
 	caret     int // the last caret reported, in UTF-16 units
 	modified  bool
-	fontSize  float64
+	font      store.Font
 	busy      bool
 	busyHint  bool
 	placeholt string
@@ -94,7 +95,7 @@ func NewEditor(hooks editorHooks) *Editor {
 		undo:       widgets.NewUndoHistoryController(),
 		fieldKey:   widgets.NewGlobalKey[*widgets.EditableTextState](),
 		changes:    foundation.NewChangeNotifier(),
-		fontSize:   14,
+		font:       store.Font{Size: store.DefaultFontSize},
 		placeholt:  "Write or paste your English text here...",
 		units:      analysis.NewUTF16Map(""),
 	}
@@ -278,17 +279,18 @@ func (e *Editor) Undo() { e.undo.Undo() }
 // Focus gives the keyboard focus to the editor.
 func (e *Editor) Focus() { e.focus.RequestFocus() }
 
-// SetFontSize sets the font size in points.
-func (e *Editor) SetFontSize(points int) {
-	if points < 1 {
+// SetFont sets the font family and its size in points. An empty family is the
+// theme's; a size below 1 is ignored.
+func (e *Editor) SetFont(f store.Font) {
+	if f.Size < 1 {
 		return
 	}
-	e.fontSize = float64(points)
+	e.font = f
 	e.refresh()
 }
 
-// FontSize returns the font size in points.
-func (e *Editor) FontSize() int { return int(e.fontSize) }
+// Font returns the font family and its size in points.
+func (e *Editor) Font() store.Font { return e.font }
 
 // SetBusy puts the loading screen over the editor, or takes it away. While it is
 // up the text cannot be edited, because the result of the check in progress is
@@ -413,7 +415,7 @@ func (e *Editor) Widget() widgets.Widget {
 
 func (e *Editor) build(bc widgets.BuildContext) widgets.Widget {
 	theme := m.ThemeOf(bc)
-	base := theme.TextTheme.BodyLarge.CopyWith(painting.TextStyleCopy{FontSize: foundation.Some(e.fontSize * 4 / 3)})
+	base := theme.TextTheme.BodyLarge.CopyWith(painting.TextStyleCopy{FontFamily: e.font.Family, FontSize: foundation.Some(pixels(e.font.Size))})
 	field := m.NewEditableText(e.controller, e.focus, base, theme.ColorScheme.Primary(), theme.ColorScheme.OnSurface(),
 		widgets.EditableTextOpts{
 			Key:                    e.fieldKey,

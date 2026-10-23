@@ -13,6 +13,7 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
+	"github.com/rm4n0s/english-tutor/internal/store"
 	"github.com/rm4n0s/english-tutor/internal/view"
 )
 
@@ -118,6 +119,9 @@ type MainWindow struct {
 	redraw   *foundation.ChangeNotifier // tells the widget tree to rebuild
 	editor   *Editor
 
+	fonts        store.Fonts
+	fontsChanged *foundation.ChangeNotifier // tells the theme of the app to rebuild
+
 	title string
 
 	llms        []LLMChoice
@@ -170,18 +174,20 @@ type MainWindow struct {
 // thread; it may be nil when nothing needs a timer.
 func NewMainWindow(rt *Runtime) *MainWindow {
 	w := &MainWindow{
-		rt:          rt,
-		redraw:      foundation.NewChangeNotifier(),
-		title:       "English Tutor",
-		selectedLLM: -1,
-		legendOn:    map[analysis.Category]bool{},
-		webText:     webStartText,
-		webTip:      webStartTip,
-		hintDelay:   busyHintDelay,
-		hSplit:      newSplitter(false, 2, 1),
-		vSplit:      newSplitter(true, 1, 2),
-		size:        [2]int{1100, 700},
-		visible:     true,
+		rt:           rt,
+		redraw:       foundation.NewChangeNotifier(),
+		fonts:        store.DefaultFonts(),
+		fontsChanged: foundation.NewChangeNotifier(),
+		title:        "English Tutor",
+		selectedLLM:  -1,
+		legendOn:     map[analysis.Category]bool{},
+		webText:      webStartText,
+		webTip:       webStartTip,
+		hintDelay:    busyHintDelay,
+		hSplit:       newSplitter(false, 2, 1),
+		vSplit:       newSplitter(true, 1, 2),
+		size:         [2]int{1100, 700},
+		visible:      true,
 	}
 	for _, c := range legendOrder {
 		w.legendOn[c] = true
@@ -224,6 +230,7 @@ func NewMainWindow(rt *Runtime) *MainWindow {
 		},
 		CheckEnabled: func() bool { return len(w.llms) > 0 },
 	})
+	w.editor.SetFont(w.fonts.Editor)
 	w.explainScroll = widgets.NewScrollController()
 	w.listFocus = widgets.NewFocusNode()
 	w.confirmLink = func(string) bool { return false }
@@ -246,6 +253,7 @@ func (w *MainWindow) Dispose() {
 	}
 	w.editor.Dispose()
 	w.listFocus.Dispose()
+	w.fontsChanged.Dispose()
 	w.redraw.Dispose()
 }
 
@@ -606,11 +614,28 @@ func (w *MainWindow) SetEditorBusy(busy bool) {
 // EditorBusy reports whether the loading screen is over the editor.
 func (w *MainWindow) EditorBusy() bool { return w.editor.Busy() }
 
-// SetFontSize sets the editor font size in points.
-func (w *MainWindow) SetFontSize(points int) { w.editor.SetFontSize(points) }
+// SetFonts sets the fonts of the editor, the buttons and the results. A part
+// whose size is below 1 keeps the font it has.
+func (w *MainWindow) SetFonts(f store.Fonts) {
+	keep := func(font *store.Font, old store.Font) {
+		if font.Size < 1 {
+			*font = old
+		}
+	}
+	keep(&f.Editor, w.fonts.Editor)
+	keep(&f.Buttons, w.fonts.Buttons)
+	keep(&f.Results, w.fonts.Results)
+	if f == w.fonts {
+		return
+	}
+	w.fonts = f
+	w.editor.SetFont(f.Editor)
+	w.fontsChanged.NotifyListeners()
+	w.refresh()
+}
 
-// FontSize returns the editor font size in points.
-func (w *MainWindow) FontSize() int { return w.editor.FontSize() }
+// Fonts returns the fonts of the editor, the buttons and the results.
+func (w *MainWindow) Fonts() store.Fonts { return w.fonts }
 
 // Text returns the text in the editor.
 func (w *MainWindow) Text() string { return w.editor.Text() }

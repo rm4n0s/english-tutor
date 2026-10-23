@@ -11,6 +11,7 @@ import (
 	"github.com/rm4n0s/glutter/ui"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
+	"github.com/rm4n0s/english-tutor/internal/store"
 )
 
 func TestTrayMenu(t *testing.T) {
@@ -58,6 +59,35 @@ func TestIsTrayUnavailable(t *testing.T) {
 	}
 	if IsTrayUnavailable(errors.New("Other", "x")) || IsTrayUnavailable(nil) {
 		t.Error("other errors are not")
+	}
+}
+
+func TestRootGivesTheButtonsTheirFont(t *testing.T) {
+	tests := []struct {
+		name   string
+		font   store.Font
+		family string
+		size   float64
+	}{
+		{"default", store.DefaultFonts().Buttons, "", pixels(store.DefaultButtonFontSize)},
+		{"chosen", store.Font{Family: "Test Sans", Size: 15}, "Test Sans", 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tester := gluttertest.New(t)
+			rt := NewRuntime(nil)
+			w := NewMainWindow(rt)
+			t.Cleanup(w.Dispose)
+			tester.PumpWidget(Root(w, nil, rt))
+			f := w.Fonts()
+			f.Buttons = tt.font
+			w.SetFonts(f)
+			tester.PumpAndSettle()
+			label := m.ThemeOf(tester.Element(gluttertest.ByText("Preferences"))).TextTheme.LabelLarge
+			if (tt.family != "" && label.FontFamily != tt.family) || label.FontSize.OrElse(0) != tt.size {
+				t.Errorf("label style %q %v, want %q %v", label.FontFamily, label.FontSize.OrElse(0), tt.family, tt.size)
+			}
+		})
 	}
 }
 

@@ -37,10 +37,11 @@
 
     focusEditor: () => text().focus(),
 
-    // The tab title and the editor's font size follow the server's signals.
-    apply: (title, fontSize) => {
+    // The tab title and the fonts follow the server's signals. fonts is the
+    // declarations of the CSS variables of the fonts, made by the server.
+    apply: (title, fonts) => {
       if (title) document.title = title;
-      if (fontSize) document.documentElement.style.setProperty('--editor-size', fontSize + 'pt');
+      if (fonts) document.documentElement.style.cssText = fonts;
     },
 
     // Put the caret at the start of the selected issue and scroll it into view,

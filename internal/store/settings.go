@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/rm4n0s/errors"
 	"gorm.io/gorm"
@@ -13,19 +14,32 @@ import (
 
 // Settings keys.
 const (
-	KeySelectedLLMID   = "selected_llm_id"
-	KeyAutoCheck       = "auto_check"
-	KeyAutoCheckDelayS = "auto_check_delay_s"
-	KeyFontSize        = "font_size"
-	KeySplitterSizes   = "splitter_sizes"
-	KeyWindowGeometry  = "window_geometry"
+	KeySelectedLLMID     = "selected_llm_id"
+	KeyAutoCheck         = "auto_check"
+	KeyAutoCheckDelayS   = "auto_check_delay_s"
+	KeyFontSize          = "font_size" // the size of the editor's font
+	KeyEditorFontFamily  = "editor_font_family"
+	KeyButtonFontFamily  = "button_font_family"
+	KeyButtonFontSize    = "button_font_size"
+	KeyResultsFontFamily = "results_font_family"
+	KeyResultsFontSize   = "results_font_size"
+	KeySplitterSizes     = "splitter_sizes"
+	KeyWindowGeometry    = "window_geometry"
 )
 
 // Defaults used when a setting is missing or damaged.
 const (
-	DefaultAutoCheck    = false
-	DefaultAutoCheckSec = 3
-	DefaultFontSize     = 13
+	DefaultAutoCheck       = false
+	DefaultAutoCheckSec    = 3
+	DefaultFontSize        = 13 // the editor's
+	DefaultButtonFontSize  = 11
+	DefaultResultsFontSize = 11
+)
+
+// The range of a font size, in points.
+const (
+	MinFontSize = 6
+	MaxFontSize = 48
 )
 
 // GetSetting returns the value stored under key and whether it exists.
@@ -103,14 +117,76 @@ func (s *Store) SetAutoCheckDelaySeconds(ctx context.Context, seconds int) error
 	return s.SetSetting(ctx, KeyAutoCheckDelayS, strconv.Itoa(seconds))
 }
 
-// FontSize returns the editor font size in points. The default is 13.
-func (s *Store) FontSize(ctx context.Context) (int, error) {
-	return s.positiveInt(ctx, KeyFontSize, DefaultFontSize)
+// Font is a font family and a size in points. An empty family is the default
+// font of the place where it is used.
+type Font struct {
+	Family string
+	Size   int
 }
 
-// SetFontSize stores the editor font size.
-func (s *Store) SetFontSize(ctx context.Context, points int) error {
-	return s.SetSetting(ctx, KeyFontSize, strconv.Itoa(points))
+// Fonts are the fonts of the three parts of the window: the editor, the buttons,
+// and the results (the issues list and the explanation panel).
+type Fonts struct {
+	Editor, Buttons, Results Font
+}
+
+// DefaultFonts are the fonts used when none are stored: the default family in
+// each part, 13 points in the editor and 11 elsewhere.
+func DefaultFonts() Fonts {
+	return Fonts{
+		Editor:  Font{Size: DefaultFontSize},
+		Buttons: Font{Size: DefaultButtonFontSize},
+		Results: Font{Size: DefaultResultsFontSize},
+	}
+}
+
+// fontSetting is a font of Fonts with the keys it is stored under.
+type fontSetting struct {
+	font         *Font
+	family, size string
+	defaultSize  int
+}
+
+func fontSettings(f *Fonts) []fontSetting {
+	return []fontSetting{
+		{&f.Editor, KeyEditorFontFamily, KeyFontSize, DefaultFontSize},
+		{&f.Buttons, KeyButtonFontFamily, KeyButtonFontSize, DefaultButtonFontSize},
+		{&f.Results, KeyResultsFontFamily, KeyResultsFontSize, DefaultResultsFontSize},
+	}
+}
+
+// Fonts returns the fonts of the window. A size outside MinFontSize to
+// MaxFontSize is damaged and gives the default.
+func (s *Store) Fonts(ctx context.Context) (Fonts, error) {
+	var f Fonts
+	for _, fs := range fontSettings(&f) {
+		family, _, err := s.GetSetting(ctx, fs.family)
+		if err != nil {
+			return DefaultFonts(), err
+		}
+		size, err := s.positiveInt(ctx, fs.size, fs.defaultSize)
+		if err != nil {
+			return DefaultFonts(), err
+		}
+		if size < MinFontSize || size > MaxFontSize {
+			size = fs.defaultSize
+		}
+		*fs.font = Font{Family: strings.TrimSpace(family), Size: size}
+	}
+	return f, nil
+}
+
+// SetFonts stores the fonts of the window.
+func (s *Store) SetFonts(ctx context.Context, f Fonts) error {
+	for _, fs := range fontSettings(&f) {
+		if err := s.SetSetting(ctx, fs.family, strings.TrimSpace(fs.font.Family)); err != nil {
+			return err
+		}
+		if err := s.SetSetting(ctx, fs.size, strconv.Itoa(fs.font.Size)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SplitterSizes returns the saved splitter sizes, or nil if none are saved.

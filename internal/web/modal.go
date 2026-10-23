@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rm4n0s/errors"
 
@@ -153,8 +154,11 @@ type prefsView struct {
 type generalForm struct {
 	AutoCheck bool
 	DelayS    int
-	FontSize  int
+	Fonts     store.Fonts
 }
+
+// maxFontFamily is the longest font family name the General tab takes, in characters.
+const maxFontFamily = 100
 
 // llmForm is the Add / Edit form of one LLM. The API key stored for an LLM is
 // never sent to the browser: hasKey says there is one, and an empty key field
@@ -240,7 +244,7 @@ func (w *workspace) loadPrefs(pv *prefsView) bool {
 		return false
 	}
 	pv.LLMs = llms
-	pv.General = generalForm{AutoCheck: w.autoCheck, DelayS: int(w.autoDelay.Seconds()), FontSize: w.fontSize}
+	pv.General = generalForm{AutoCheck: w.autoCheck, DelayS: int(w.autoDelay.Seconds()), Fonts: w.fonts}
 	return true
 }
 
@@ -474,8 +478,23 @@ func (w *workspace) saveGeneral(v func(string) string) {
 	}
 	g := generalForm{AutoCheck: v("auto_check") != ""}
 	var msg string
-	if g.DelayS, msg = boundedInt(v("delay_s"), 1, 600, "The auto-check delay"); msg == "" {
-		g.FontSize, msg = boundedInt(v("font_size"), 6, 48, "The font size")
+	g.DelayS, msg = boundedInt(v("delay_s"), 1, 600, "The auto-check delay")
+	for _, p := range []struct {
+		font         *store.Font
+		family, size string
+		what         string
+	}{
+		{&g.Fonts.Editor, "editor_family", "font_size", "The editor font size"},
+		{&g.Fonts.Buttons, "button_family", "button_size", "The buttons font size"},
+		{&g.Fonts.Results, "results_family", "results_size", "The results font size"},
+	} {
+		if msg != "" {
+			break
+		}
+		p.font.Size, msg = boundedInt(v(p.size), store.MinFontSize, store.MaxFontSize, p.what)
+		if p.font.Family = strings.TrimSpace(v(p.family)); msg == "" && utf8.RuneCountInString(p.font.Family) > maxFontFamily {
+			msg = fmt.Sprintf("A font name must be at most %d characters.", maxFontFamily)
+		}
 	}
 	if msg != "" {
 		pv.Message = msg
@@ -491,13 +510,13 @@ func (w *workspace) saveGeneral(v func(string) string) {
 		w.showError("saving auto-check delay", err)
 		return
 	}
-	if err := st.SetFontSize(w.ctx(), g.FontSize); err != nil {
-		w.showError("saving font size", err)
+	if err := st.SetFonts(w.ctx(), g.Fonts); err != nil {
+		w.showError("saving fonts", err)
 		return
 	}
 	pv.General, pv.Message = g, ""
 	w.autoDelay = secondsOf(g.DelayS)
-	w.fontSize = g.FontSize
+	w.fonts = g.Fonts
 	w.setAutoCheck(g.AutoCheck)
 	w.touch(rModal | rSignals)
 	w.notifyDesktop()

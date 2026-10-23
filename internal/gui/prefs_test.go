@@ -11,6 +11,7 @@ import (
 	"github.com/rm4n0s/errors"
 	"github.com/rm4n0s/glutter/gluttertest"
 	m "github.com/rm4n0s/glutter/material"
+	"github.com/rm4n0s/glutter/widgets"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/store"
@@ -39,7 +40,7 @@ type fakeBackend struct {
 }
 
 func newFakeBackend(cfgs ...store.LLMConfig) *fakeBackend {
-	b := &fakeBackend{general: General{AutoCheckDelayS: 3, FontSize: 13}, web: WebSettings{Port: 3333}, nextID: 100}
+	b := &fakeBackend{general: General{AutoCheckDelayS: 3, Fonts: store.DefaultFonts()}, web: WebSettings{Port: 3333}, nextID: 100}
 	b.configs = cfgs
 	return b
 }
@@ -205,8 +206,11 @@ func afterForm(t *testing.T, tester *gluttertest.Tester, cond func() bool) {
 
 func TestPreferencesShowsTheStoredState(t *testing.T) {
 	b := newFakeBackend(ollamaCfg(1, "local"), store.LLMConfig{ID: 2, Name: "claude", Provider: "anthropic", Model: "claude-sonnet-5-5"})
-	b.general = General{AutoCheck: true, AutoCheckDelayS: 7, FontSize: 15}
+	b.general = General{AutoCheck: true, AutoCheckDelayS: 7, Fonts: store.Fonts{
+		Editor: store.Font{Size: 15}, Buttons: store.Font{Family: "Gone Sans", Size: 9}, Results: store.Font{Family: "Test Serif", Size: 12},
+	}}
 	tester, _, d, _ := showPrefs(t, b)
+	d.installedFamilies = func(widgets.BuildContext) []string { return []string{"Other", "Test Serif"} }
 	if rows := d.LLMRows(); len(rows) != 2 || rows[0] != "local  —  ollama · llama3.1" || d.SelectedLLMRow() != 0 || !d.LLMButtonsEnabled() {
 		t.Errorf("rows %q selected %d", rows, d.SelectedLLMRow())
 	}
@@ -220,10 +224,37 @@ func TestPreferencesShowsTheStoredState(t *testing.T) {
 	}
 	d.SelectTab(1)
 	tester.Pump()
-	for _, text := range []string{"Auto-check", "Auto-check delay", "Editor font size", "7 s", "15 pt"} {
+	for _, text := range []string{"Auto-check", "Auto-check delay", "Editor font", "Buttons font", "Results font", "7 s", "15 pt", "9 pt", "12 pt"} {
 		if err := gluttertest.FindsOneWidget(tester, inDialog(text)); err != nil {
 			t.Errorf("%q: %v", text, err)
 		}
+	}
+	// Each list shows the family it has; the others are in the menu it opens.
+	for _, text := range []string{defaultFontLabel, "Test Serif", "Gone Sans (not installed)"} {
+		if err := gluttertest.FindsOneWidget(tester, inDialog(text)); err != nil {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+	tests := []struct {
+		part FontPart
+		want []string
+	}{
+		{FontEditor, []string{"", "Other", "Test Serif"}},
+		{FontButtons, []string{"", "Other", "Test Serif", "Gone Sans"}},
+		{FontResults, []string{"", "Other", "Test Serif"}},
+	}
+	for _, tt := range tests {
+		if got := d.FontChoices(tt.part); !slices.Equal(got, tt.want) {
+			t.Errorf("%s choices %q, want %q", tt.part.label(), got, tt.want)
+		}
+	}
+
+	tester.Tap(inDialog("Test Serif"))
+	tester.PumpAndSettle()
+	tester.Tap(gluttertest.ByText("Other"))
+	tester.PumpAndSettle()
+	if f := b.general.Fonts; f.Results.Family != "Other" || f.Editor.Family != "" || f.Buttons.Family != "Gone Sans" {
+		t.Errorf("after choosing Other for the results: %+v", f)
 	}
 }
 
@@ -450,7 +481,7 @@ func TestLoadFailureShowsABannerAndDefaults(t *testing.T) {
 	if d.BannerText() == "" || len(h.failed) != 3 {
 		t.Errorf("banner %q failed %d", d.BannerText(), len(h.failed))
 	}
-	if g := d.GeneralSettings(); g.AutoCheckDelayS != store.DefaultAutoCheckSec || g.FontSize != store.DefaultFontSize || d.WebPortValue() != store.DefaultWebPort {
+	if g := d.GeneralSettings(); g.AutoCheckDelayS != store.DefaultAutoCheckSec || g.Fonts != store.DefaultFonts() || d.WebPortValue() != store.DefaultWebPort {
 		t.Errorf("defaults: %+v port %d", g, d.WebPortValue())
 	}
 }
@@ -466,13 +497,16 @@ func TestGeneralSettingsAreStoredAtOnce(t *testing.T) {
 		t.Errorf("general %+v changed %d", b.general, h.changed)
 	}
 	d.SetAutoCheckDelay(9)
-	d.SetFontSize(100) // out of range: held at the maximum
-	if g := b.general; g.AutoCheckDelayS != 9 || g.FontSize != 48 || h.changed != 3 {
+	d.SetFontSize(FontEditor, 100) // out of range: held at the maximum
+	d.SetFontSize(FontButtons, 2)  // and at the minimum
+	d.SetFontFamily(FontResults, "Test Serif")
+	want := store.Fonts{Editor: store.Font{Size: 48}, Buttons: store.Font{Size: 6}, Results: store.Font{Family: "Test Serif", Size: store.DefaultResultsFontSize}}
+	if g := b.general; g.AutoCheckDelayS != 9 || g.Fonts != want || h.changed != 5 {
 		t.Errorf("general %+v changed %d", g, h.changed)
 	}
 	b.generalErr = errors.New("SettingSaveFailed", "The setting could not be saved.")
-	d.SetFontSize(12)
-	if d.BannerText() != "The setting could not be saved." || len(h.failed) != 1 || h.changed != 3 {
+	d.SetFontSize(FontEditor, 12)
+	if d.BannerText() != "The setting could not be saved." || len(h.failed) != 1 || h.changed != 5 {
 		t.Errorf("banner %q failed %v", d.BannerText(), h.failed)
 	}
 }

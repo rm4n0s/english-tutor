@@ -83,8 +83,8 @@ func TestNewAppWithFreshDatabase(t *testing.T) {
 		if w.AutoCheck() {
 			t.Error("auto-check must be off on a fresh database")
 		}
-		if w.FontSize() != store.DefaultFontSize {
-			t.Errorf("font size = %d, want %d", w.FontSize(), store.DefaultFontSize)
+		if w.Fonts() != store.DefaultFonts() {
+			t.Errorf("fonts = %+v, want %+v", w.Fonts(), store.DefaultFonts())
 		}
 		if logs.String() != "" {
 			t.Errorf("nothing should be logged on a clean start:\n%s", logs.String())
@@ -97,10 +97,11 @@ func TestNewAppLoadsSavedState(t *testing.T) {
 	st := newStore(t)
 	addLLM(t, st, "local")
 	claude := addLLM(t, st, "claude")
+	fonts := store.Fonts{Editor: store.Font{Family: "Test Serif", Size: 18}, Buttons: store.Font{Size: 10}, Results: store.Font{Family: "Test Sans", Size: 12}}
 	for _, err := range []error{
 		st.SetSelectedLLMID(ctx, claude),
 		st.SetAutoCheck(ctx, true),
-		st.SetFontSize(ctx, 18),
+		st.SetFonts(ctx, fonts),
 	} {
 		if err != nil {
 			t.Fatal(err)
@@ -115,8 +116,8 @@ func TestNewAppLoadsSavedState(t *testing.T) {
 		if !w.AutoCheck() {
 			t.Error("auto-check should be restored")
 		}
-		if w.FontSize() != 18 {
-			t.Errorf("font size = %d, want 18", w.FontSize())
+		if w.Fonts() != fonts {
+			t.Errorf("fonts = %+v, want %+v", w.Fonts(), fonts)
 		}
 	})
 }

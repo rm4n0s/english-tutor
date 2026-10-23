@@ -201,10 +201,10 @@ func (w *MainWindow) leftPane(bc widgets.BuildContext) widgets.Widget {
 
 func (w *MainWindow) issuesPane(bc widgets.BuildContext) widgets.Widget {
 	theme := m.ThemeOf(bc)
-	bold := theme.TextTheme.TitleSmall
+	bold := w.resultsStyle(theme, theme.TextTheme.TitleSmall)
 	var list widgets.Widget
 	if len(w.rows) == 0 {
-		list = m.NewPadding(painting.NewEdgeInsetsAll(8), m.NewText(w.emptyText, m.TextOpts{Style: theme.TextTheme.BodyMedium.CopyWith(
+		list = m.NewPadding(painting.NewEdgeInsetsAll(8), m.NewText(w.emptyText, m.TextOpts{Style: w.resultsStyle(theme, theme.TextTheme.BodyMedium).CopyWith(
 			painting.TextStyleCopy{Color: foundation.Some(ui.NewColor(0xFF808080))})}))
 	} else {
 		list = m.NewListViewBuilder(func(bc widgets.BuildContext, i int) widgets.Widget {
@@ -236,7 +236,7 @@ func (w *MainWindow) issueRow(bc widgets.BuildContext, i int) widgets.Widget {
 	if b := r.Badge(); b != "" {
 		second = append(second, painting.NewTextSpan(painting.TextSpanOpts{Text: foundation.Some("  " + b), Style: bold(theme.ColorScheme.OnSurface())}))
 	}
-	text := m.NewTextRich(painting.NewTextSpan(painting.TextSpanOpts{Children: []painting.InlineSpan{
+	text := m.NewTextRich(painting.NewTextSpan(painting.TextSpanOpts{Style: w.resultsStyle(theme, theme.TextTheme.BodyMedium), Children: []painting.InlineSpan{
 		painting.NewTextSpan(painting.TextSpanOpts{Text: foundation.Some(r.Marker), Style: bold(color)}),
 		painting.NewTextSpan(painting.TextSpanOpts{Text: foundation.Some(" " + r.Snippet + "\n")}),
 		painting.NewTextSpan(painting.TextSpanOpts{Children: second}),
@@ -287,7 +287,7 @@ func (w *MainWindow) explainPane(bc widgets.BuildContext) widgets.Widget {
 	c := view.ControlsFor(w.explainState)
 	var col []widgets.Widget
 	if c.Header {
-		col = append(col, m.NewPadding(painting.NewEdgeInsetsAll(6), m.NewText(w.explainHeader, m.TextOpts{Style: theme.TextTheme.TitleSmall})))
+		col = append(col, m.NewPadding(painting.NewEdgeInsetsAll(6), m.NewText(w.explainHeader, m.TextOpts{Style: w.resultsStyle(theme, theme.TextTheme.TitleSmall)})))
 	}
 	if c.Progress {
 		col = append(col, m.NewLinearProgressIndicator())
@@ -317,7 +317,7 @@ func (w *MainWindow) explainPane(bc widgets.BuildContext) widgets.Widget {
 // only asks the window, which decides (see onLink).
 func (w *MainWindow) markdownView(bc widgets.BuildContext, blocks []mdBlock) widgets.Widget {
 	theme := m.ThemeOf(bc)
-	base := theme.TextTheme.BodyMedium
+	base := w.resultsStyle(theme, theme.TextTheme.BodyMedium)
 	var out []widgets.Widget
 	pad := func(child widgets.Widget) widgets.Widget {
 		return m.NewPadding(painting.NewEdgeInsetsSymmetric(4, 0), child)
@@ -327,9 +327,9 @@ func (w *MainWindow) markdownView(bc widgets.BuildContext, blocks []mdBlock) wid
 		case blockParagraph:
 			out = append(out, pad(m.NewTextRich(w.inlineSpan(bc, base, b.Inlines))))
 		case blockHeading:
-			style := theme.TextTheme.TitleMedium
+			style := w.resultsStyle(theme, theme.TextTheme.TitleMedium)
 			if b.Level == 1 {
-				style = theme.TextTheme.TitleLarge
+				style = w.resultsStyle(theme, theme.TextTheme.TitleLarge)
 			}
 			out = append(out, pad(m.NewTextRich(w.inlineSpan(bc, style, b.Inlines))))
 		case blockCode:
@@ -356,6 +356,18 @@ func (w *MainWindow) markdownView(bc widgets.BuildContext, blocks []mdBlock) wid
 		}
 	}
 	return m.NewColumn(out, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStart})
+}
+
+// pixels is a size in points as logical pixels.
+func pixels(points int) float64 { return float64(points) * 4 / 3 }
+
+// resultsStyle is a style of the theme in the font of the results: their family,
+// and the size scaled so that body text has the chosen size and headings keep
+// their proportion to it.
+func (w *MainWindow) resultsStyle(theme *m.ThemeData, style *painting.TextStyle) *painting.TextStyle {
+	f := w.fonts.Results
+	scale := pixels(f.Size) / theme.TextTheme.BodyMedium.FontSize.OrElse(14)
+	return style.CopyWith(painting.TextStyleCopy{FontFamily: f.Family, FontSize: foundation.Some(style.FontSize.OrElse(14) * scale)})
 }
 
 func mono(base *painting.TextStyle) *painting.TextStyle {

@@ -3,9 +3,12 @@ package gui
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/rm4n0s/glutter/foundation"
 	m "github.com/rm4n0s/glutter/material"
+	"github.com/rm4n0s/glutter/material/fonts"
+	"github.com/rm4n0s/glutter/painting"
 	"github.com/rm4n0s/glutter/widgets"
 
 	"github.com/rm4n0s/english-tutor/internal/analysis"
@@ -16,8 +19,44 @@ import (
 type General struct {
 	AutoCheck       bool
 	AutoCheckDelayS int
-	FontSize        int
+	Fonts           store.Fonts
 }
+
+// FontPart is a part of the window that has a font of its own.
+type FontPart int
+
+const (
+	FontEditor FontPart = iota
+	FontButtons
+	FontResults
+)
+
+// label is the name of the part in the General tab.
+func (p FontPart) label() string {
+	switch p {
+	case FontButtons:
+		return "Buttons"
+	case FontResults:
+		return "Results"
+	default:
+		return "Editor"
+	}
+}
+
+// of returns the font of the part.
+func (p FontPart) of(f *store.Fonts) *store.Font {
+	switch p {
+	case FontButtons:
+		return &f.Buttons
+	case FontResults:
+		return &f.Results
+	default:
+		return &f.Editor
+	}
+}
+
+// defaultFontLabel is the choice of the default family in the font lists.
+const defaultFontLabel = "Default"
 
 // WebSettings holds the settings of the Web server tab (section 4.7). The
 // password itself is never shown or kept: only whether there is one.
@@ -116,6 +155,10 @@ type PreferencesDialog struct {
 	banner     string
 
 	general General
+	// families are the installed font families, read when the General tab is
+	// first drawn; installedFamilies reads them, and tests replace it.
+	families          []string
+	installedFamilies func(bc widgets.BuildContext) []string
 
 	web struct {
 		settings WebSettings
@@ -139,6 +182,7 @@ func NewPreferencesDialog(ctx context.Context, win *MainWindow, backend Preferen
 	d.confirm = func(text string, done func(bool)) { win.Confirm("Preferences", text, done) }
 	d.showForm = func(f *LLMForm) { win.ShowDialog(f) }
 	d.askPassword = d.askPasswordTwice
+	d.installedFamilies = installedFamilies
 	d.reload(0)
 	d.loadGeneral()
 	d.loadWeb()
@@ -281,7 +325,7 @@ func (d *PreferencesDialog) loadGeneral() {
 	g, err := d.backend.General(d.ctx)
 	if err != nil {
 		d.fail(err)
-		g = General{AutoCheckDelayS: store.DefaultAutoCheckSec, FontSize: store.DefaultFontSize}
+		g = General{AutoCheckDelayS: store.DefaultAutoCheckSec, Fonts: store.DefaultFonts()}
 	}
 	d.general = g
 	d.refresh()
@@ -290,16 +334,45 @@ func (d *PreferencesDialog) loadGeneral() {
 // GeneralSettings returns the settings the General tab shows.
 func (d *PreferencesDialog) GeneralSettings() General { return d.general }
 
-// SetAutoCheck, SetAutoCheckDelay and SetFontSize change a setting as the user
-// would; each is stored at once.
+// SetAutoCheck, SetAutoCheckDelay, SetFontFamily and SetFontSize change a
+// setting as the user would; each is stored at once. An empty family is the
+// default one.
 func (d *PreferencesDialog) SetAutoCheck(on bool) { d.general.AutoCheck = on; d.generalChanged() }
 func (d *PreferencesDialog) SetAutoCheckDelay(s int) {
 	d.general.AutoCheckDelayS = min(max(s, 1), 600)
 	d.generalChanged()
 }
-func (d *PreferencesDialog) SetFontSize(pt int) {
-	d.general.FontSize = min(max(pt, 6), 48)
+func (d *PreferencesDialog) SetFontFamily(part FontPart, family string) {
+	part.of(&d.general.Fonts).Family = family
 	d.generalChanged()
+}
+func (d *PreferencesDialog) SetFontSize(part FontPart, pt int) {
+	part.of(&d.general.Fonts).Size = min(max(pt, store.MinFontSize), store.MaxFontSize)
+	d.generalChanged()
+}
+
+// FontChoices returns the families the list of a part offers, the default ("")
+// first. The family the part has is among them even when it is not installed.
+// The installed ones are known once the General tab has been drawn.
+func (d *PreferencesDialog) FontChoices(part FontPart) []string {
+	out := append([]string{""}, d.families...)
+	current := part.of(&d.general.Fonts).Family
+	if current != "" && !slices.Contains(d.families, current) {
+		out = append(out, current)
+	}
+	return out
+}
+
+// installedFamilies are the families of the system's fonts and of the program's,
+// without the icon font.
+func installedFamilies(bc widgets.BuildContext) []string {
+	var out []string
+	for _, f := range m.WidgetsBindingOf(bc).PlatformDispatcher().InstalledFontFamilies() {
+		if f != fonts.MaterialIconsFamily {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func (d *PreferencesDialog) generalChanged() {
@@ -514,13 +587,44 @@ func (d *PreferencesDialog) generalTab(bc widgets.BuildContext) widgets.Widget {
 	if g.AutoCheck {
 		delay = func(v float64) { d.SetAutoCheckDelay(int(v)) }
 	}
-	return m.NewColumn([]widgets.Widget{
+	if d.families == nil {
+		d.families = append([]string{}, d.installedFamilies(bc)...)
+	}
+	rows := []widgets.Widget{
 		tipped("Off by default. The Check button always works.",
 			formRow("Auto-check", checkRow("Check automatically when I pause typing", g.AutoCheck, d.SetAutoCheck))),
 		tipped("How long to wait after the last key press. Used only when auto-check is on.",
 			formRow("Auto-check delay", spin{value: float64(g.AutoCheckDelayS), min: 1, max: 600, step: 1, suffix: " s"}.widget(delay))),
-		formRow("Editor font size", spin{value: float64(g.FontSize), min: 6, max: 48, step: 1, suffix: " pt"}.widget(func(v float64) { d.SetFontSize(int(v)) })),
-	}, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch})
+	}
+	for part := FontEditor; part <= FontResults; part++ {
+		rows = append(rows, d.fontRow(part))
+	}
+	rows = append(rows, note(bc, "Results are the issues list and the explanation. The buttons font is also used by the menus.", false))
+	return m.NewSingleChildScrollView(m.NewColumn(rows, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch}))
+}
+
+// fontRow is the family list and the size of the font of a part.
+func (d *PreferencesDialog) fontRow(part FontPart) widgets.Widget {
+	f := *part.of(&d.general.Fonts)
+	var items []*m.DropdownMenuItem[string]
+	for _, family := range d.FontChoices(part) {
+		label := family
+		switch {
+		case family == "":
+			label = defaultFontLabel
+		case !slices.Contains(d.families, family):
+			label = family + " (not installed)"
+		}
+		items = append(items, m.NewDropdownMenuItem[string](m.NewText(label, m.TextOpts{Overflow: painting.TextOverflowEllipsis, MaxLines: foundation.Some(1)}),
+			m.DropdownMenuItemOpts[string]{Value: foundation.Some(family)}))
+	}
+	family := m.NewDropdownButton(items, func(v foundation.Opt[string]) {
+		if s, ok := v.Get(); ok {
+			d.SetFontFamily(part, s)
+		}
+	}, m.DropdownButtonOpts[string]{Value: foundation.Some(f.Family), IsExpanded: true})
+	size := spin{value: float64(f.Size), min: store.MinFontSize, max: store.MaxFontSize, step: 1, suffix: " pt"}.widget(func(v float64) { d.SetFontSize(part, int(v)) })
+	return formRow(part.label()+" font", m.NewRow([]widgets.Widget{m.NewExpanded(family), spaceX(8), size}))
 }
 
 func (d *PreferencesDialog) webTab(bc widgets.BuildContext) widgets.Widget {

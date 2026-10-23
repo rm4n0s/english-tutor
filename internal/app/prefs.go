@@ -45,7 +45,7 @@ func (p preferences) General(ctx context.Context) (gui.General, error) {
 	if g.AutoCheckDelayS, err = p.store.AutoCheckDelaySeconds(ctx); err != nil {
 		return gui.General{}, err
 	}
-	if g.FontSize, err = p.store.FontSize(ctx); err != nil {
+	if g.Fonts, err = p.store.Fonts(ctx); err != nil {
 		return gui.General{}, err
 	}
 	return g, nil
@@ -58,7 +58,7 @@ func (p preferences) SetGeneral(ctx context.Context, g gui.General) error {
 	if err := p.store.SetAutoCheckDelaySeconds(ctx, g.AutoCheckDelayS); err != nil {
 		return err
 	}
-	return p.store.SetFontSize(ctx, g.FontSize)
+	return p.store.SetFonts(ctx, g.Fonts)
 }
 
 // openPreferences shows the modal Preferences dialog. When it changes
@@ -80,9 +80,14 @@ func (a *App) openPreferences() {
 func (a *App) applyPreferences() {
 	a.reloadLLMs()
 	a.loadAutoCheck()
-	if size, err := a.store.FontSize(a.ctx); err != nil {
-		logging.LogError(a.log, "reading font size", err)
+	a.loadFonts()
+}
+
+// loadFonts gives the window the stored fonts.
+func (a *App) loadFonts() {
+	if f, err := a.store.Fonts(a.ctx); err != nil {
+		logging.LogError(a.log, "reading fonts", err)
 	} else {
-		a.win.SetFontSize(size)
+		a.win.SetFonts(f)
 	}
 }

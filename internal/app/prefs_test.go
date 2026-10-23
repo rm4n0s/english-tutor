@@ -48,10 +48,12 @@ func TestPreferencesBackendGeneral(t *testing.T) {
 	ctx := context.Background()
 	p := preferences{store: newStore(t)}
 	got, err := p.General(ctx)
-	if err != nil || got != (gui.General{AutoCheck: false, AutoCheckDelayS: 3, FontSize: 13}) {
+	if err != nil || got != (gui.General{AutoCheck: false, AutoCheckDelayS: 3, Fonts: store.DefaultFonts()}) {
 		t.Fatalf("defaults = %+v, %v", got, err)
 	}
-	want := gui.General{AutoCheck: true, AutoCheckDelayS: 8, FontSize: 19}
+	want := gui.General{AutoCheck: true, AutoCheckDelayS: 8, Fonts: store.Fonts{
+		Editor: store.Font{Size: 19}, Buttons: store.Font{Family: "Test Sans", Size: 9}, Results: store.Font{Family: "Test Serif", Size: 14},
+	}}
 	if err := p.SetGeneral(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -132,12 +134,13 @@ func TestApplyPreferencesUpdatesTheWindow(t *testing.T) {
 	ctx := context.Background()
 	st := newStore(t)
 	withApp(t, st, func(a *App, _ *syncBuffer) {
-		if err := (preferences{store: st}).SetGeneral(ctx, gui.General{AutoCheck: true, AutoCheckDelayS: 5, FontSize: 21}); err != nil {
+		fonts := store.Fonts{Editor: store.Font{Size: 21}, Buttons: store.Font{Family: "Test Sans", Size: 12}, Results: store.Font{Size: 8}}
+		if err := (preferences{store: st}).SetGeneral(ctx, gui.General{AutoCheck: true, AutoCheckDelayS: 5, Fonts: fonts}); err != nil {
 			t.Fatal(err)
 		}
 		a.applyPreferences()
-		if !a.Window().AutoCheck() || a.Window().FontSize() != 21 {
-			t.Errorf("auto-check=%v font=%d", a.Window().AutoCheck(), a.Window().FontSize())
+		if !a.Window().AutoCheck() || a.Window().Fonts() != fonts {
+			t.Errorf("auto-check=%v fonts=%+v", a.Window().AutoCheck(), a.Window().Fonts())
 		}
 	})
 }

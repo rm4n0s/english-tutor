@@ -63,7 +63,7 @@ type workspace struct {
 	autoCheck bool
 	autoDelay time.Duration
 	autoTimer *time.Timer
-	fontSize  int
+	fonts     store.Fonts
 
 	sourceKey  string
 	place      place
@@ -141,7 +141,7 @@ func (s *Server) newWorkspace(r *run, owner string) *workspace {
 		typeCounts: map[string]int{},
 		subs:       map[*subscriber]struct{}{},
 		autoDelay:  store.DefaultAutoCheckSec * time.Second,
-		fontSize:   store.DefaultFontSize,
+		fonts:      store.DefaultFonts(),
 		lastSeen:   s.now(),
 	}
 	w.state.Subscribe(w.onStateChange)
@@ -169,10 +169,10 @@ func (w *workspace) loadSettings() {
 	} else {
 		w.autoDelay = time.Duration(secs) * time.Second
 	}
-	if size, err := st.FontSize(w.ctx()); err != nil {
-		w.logError("reading font size", err)
+	if f, err := st.Fonts(w.ctx()); err != nil {
+		w.logError("reading fonts", err)
 	} else {
-		w.fontSize = size
+		w.fonts = f
 	}
 }
 

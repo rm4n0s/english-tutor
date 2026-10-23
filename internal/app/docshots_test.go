@@ -108,7 +108,9 @@ func TestDocScreenshots(t *testing.T) {
 
 	h.tester.SetViewSize(ui.Size{Width: 1100, Height: 800})
 	h.onUI(func() {
-		h.a.win.SetFontSize(12)
+		fonts := store.DefaultFonts()
+		fonts.Editor.Size = 12
+		h.a.win.SetFonts(fonts)
 		h.a.win.SetSplitterSizes([]int{770, 330, 320, 410}) // room for the whole issues list
 		h.a.win.Show()
 	})

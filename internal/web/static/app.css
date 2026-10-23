@@ -16,7 +16,13 @@
   --grammar: #d55e00;
   --vocabulary: #0072b2;
   --syntax: #009e73;
+  --ui-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --editor-font: var(--ui-font);
   --editor-size: 13pt;
+  --button-font: var(--ui-font);
+  --button-size: 11pt;
+  --results-font: var(--ui-font);
+  --results-size: 11pt;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -43,7 +49,7 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 15px/1.45 var(--ui-font);
 }
 [hidden] { display: none !important; }
 h2 { font-size: 1rem; margin: 0 0 0.5rem; }
@@ -57,7 +63,7 @@ button, select, input {
   border-radius: 6px;
   padding: 0.3rem 0.7rem;
 }
-button { cursor: pointer; }
+button { cursor: pointer; font-family: var(--button-font); font-size: var(--button-size); }
 button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled, select:disabled, input:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
@@ -104,7 +110,7 @@ input[type="checkbox"] { padding: 0; }
   padding: 0.6rem 0.75rem;
   border: 0;
   border-radius: 6px;
-  font: var(--editor-size)/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: var(--editor-size)/1.5 var(--editor-font);
   letter-spacing: normal;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -127,6 +133,7 @@ input[type="checkbox"] { padding: 0; }
 .u-syntax.sel { background: color-mix(in srgb, var(--syntax) 20%, transparent); }
 
 /* Issues list */
+.issues, .explain { font-family: var(--results-font); font-size: var(--results-size); }
 .issues { flex: 0 1 40%; min-height: 6rem; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; }
 .issues .empty { color: var(--muted); margin: 0; }
 .list { list-style: none; margin: 0; padding: 0; overflow: auto; scrollbar-color: var(--border) transparent; }
@@ -172,6 +179,8 @@ input[type="checkbox"] { padding: 0; }
 .filters label { flex-direction: row; align-items: center; gap: 0.4rem; }
 .keyrow { display: flex; gap: 0.4rem; }
 .keyrow input { flex: 1; min-width: 0; }
+.fontrow { display: flex; gap: 0.6rem; }
+.fontrow label:first-child { flex: 1; min-width: 0; }
 .note { color: var(--muted); font-size: 0.85em; margin: 0; }
 .italic { font-style: italic; }
 .buttons { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.9rem; }

@@ -182,10 +182,18 @@ func TestGeneralSettingsApplyAtOnce(t *testing.T) {
 	s := b.stream(id)
 	b.post(id, "prefs/open", "")
 	b.post(id, "prefs/tab?tab=general", "")
-	s.waitRegion(t, "modal", "Auto-check delay", `value="3"`, `value="13"`)
+	s.waitRegion(t, "modal", "Auto-check delay", `value="3"`, `name="font_size" min="6" max="48" value="13"`,
+		`name="button_size" min="6" max="48" value="11"`, `name="results_family" maxlength="100" placeholder="Default" value=""`)
 
-	b.postForm(id, "prefs/general", url.Values{"auto_check": {"1"}, "delay_s": {"7"}, "font_size": {"18"}})
-	s.waitSignal(t, "_fs", float64(18))
+	good := url.Values{
+		"auto_check": {"1"}, "delay_s": {"7"},
+		"editor_family": {"Test Serif"}, "font_size": {"18"},
+		"button_family": {""}, "button_size": {"9"},
+		"results_family": {"  Test Mono "}, "results_size": {"12"},
+	}
+	fonts := store.Fonts{Editor: store.Font{Family: "Test Serif", Size: 18}, Buttons: store.Font{Size: 9}, Results: store.Font{Family: "Test Mono", Size: 12}}
+	b.postForm(id, "prefs/general", good)
+	s.waitSignal(t, "_fonts", fontCSS(fonts))
 	s.waitRegion(t, "toolbar", `id="auto" type="checkbox" checked`)
 	if on, _ := e.st.AutoCheck(t.Context()); !on {
 		t.Error("auto-check is stored")
@@ -193,22 +201,36 @@ func TestGeneralSettingsApplyAtOnce(t *testing.T) {
 	if n, _ := e.st.AutoCheckDelaySeconds(t.Context()); n != 7 {
 		t.Errorf("delay = %d", n)
 	}
-	if n, _ := e.st.FontSize(t.Context()); n != 18 {
-		t.Errorf("font size = %d", n)
+	if f, _ := e.st.Fonts(t.Context()); f != fonts {
+		t.Errorf("fonts = %+v, want %+v", f, fonts)
 	}
 
-	for _, bad := range []url.Values{
-		{"delay_s": {"0"}, "font_size": {"13"}},
-		{"delay_s": {"3"}, "font_size": {"100"}},
-		{"delay_s": {"x"}, "font_size": {"13"}},
+	with := func(key, value string) url.Values {
+		v := url.Values{}
+		for k, vs := range good {
+			v[k] = vs
+		}
+		v.Set(key, value)
+		return v
+	}
+	for _, tt := range []struct {
+		form url.Values
+		msg  string
+	}{
+		{with("delay_s", "0"), "must be a whole number from"},
+		{with("delay_s", "x"), "must be a whole number from"},
+		{with("font_size", "100"), "The editor font size must be a whole number from 6 to 48."},
+		{with("button_size", "5"), "The buttons font size must be a whole number from 6 to 48."},
+		{with("results_size", ""), "The results font size must be a whole number from 6 to 48."},
+		{with("editor_family", strings.Repeat("x", 101)), "A font name must be at most 100 characters."},
 	} {
-		b.postForm(id, "prefs/general", bad)
-		s.waitRegion(t, "modal", "must be a whole number from")
-		if n, _ := e.st.FontSize(t.Context()); n != 18 {
-			t.Errorf("a refused value was stored: %d", n)
+		b.postForm(id, "prefs/general", tt.form)
+		s.waitRegion(t, "modal", tt.msg)
+		if f, _ := e.st.Fonts(t.Context()); f != fonts {
+			t.Errorf("a refused value was stored: %+v", f)
 		}
 		b.post(id, "prefs/tab?tab=general", "")
-		s.waitRegion(t, "modal", `value="18"`)
+		s.waitRegion(t, "modal", `value="18"`, `value="Test Mono"`)
 	}
 }
 

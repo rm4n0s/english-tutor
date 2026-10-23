@@ -229,11 +229,7 @@ func (a *App) loadState() {
 	a.reloadLLMs()
 
 	a.loadAutoCheck()
-	if size, err := a.store.FontSize(a.ctx); err != nil {
-		logging.LogError(a.log, "reading font size", err)
-	} else {
-		a.win.SetFontSize(size)
-	}
+	a.loadFonts()
 	if g, err := a.store.WindowGeometry(a.ctx); err != nil {
 		logging.LogError(a.log, "reading window geometry", err)
 	} else {

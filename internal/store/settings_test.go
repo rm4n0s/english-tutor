@@ -16,8 +16,9 @@ func TestSettingDefaults(t *testing.T) {
 	if n, err := s.AutoCheckDelaySeconds(ctx); err != nil || n != 3 {
 		t.Errorf("AutoCheckDelaySeconds() = %d, %v; want 3", n, err)
 	}
-	if n, err := s.FontSize(ctx); err != nil || n != 13 {
-		t.Errorf("FontSize() = %d, %v; want 13", n, err)
+	want := Fonts{Editor: Font{Size: 13}, Buttons: Font{Size: 11}, Results: Font{Size: 11}}
+	if f, err := s.Fonts(ctx); err != nil || f != want {
+		t.Errorf("Fonts() = %+v, %v; want %+v", f, err, want)
 	}
 	if id, err := s.SelectedLLMID(ctx); err != nil || id != 0 {
 		t.Errorf("SelectedLLMID() = %d, %v; want 0", id, err)
@@ -43,7 +44,9 @@ func TestSettingRoundTrip(t *testing.T) {
 		{"auto check on", func() error { return s.SetAutoCheck(ctx, true) }, func() (any, error) { return s.AutoCheck(ctx) }, true},
 		{"auto check off again", func() error { return s.SetAutoCheck(ctx, false) }, func() (any, error) { return s.AutoCheck(ctx) }, false},
 		{"delay", func() error { return s.SetAutoCheckDelaySeconds(ctx, 8) }, func() (any, error) { return s.AutoCheckDelaySeconds(ctx) }, 8},
-		{"font size", func() error { return s.SetFontSize(ctx, 16) }, func() (any, error) { return s.FontSize(ctx) }, 16},
+		{"fonts", func() error {
+			return s.SetFonts(ctx, Fonts{Editor: Font{"Noto Serif", 16}, Buttons: Font{"", 9}, Results: Font{" DejaVu Sans ", 12}})
+		}, func() (any, error) { return s.Fonts(ctx) }, Fonts{Editor: Font{"Noto Serif", 16}, Buttons: Font{"", 9}, Results: Font{"DejaVu Sans", 12}}},
 		{"selected llm", func() error { return s.SetSelectedLLMID(ctx, 7) }, func() (any, error) { return s.SelectedLLMID(ctx) }, uint(7)},
 		{"selected llm replaced", func() error { return s.SetSelectedLLMID(ctx, 0) }, func() (any, error) { return s.SelectedLLMID(ctx) }, uint(0)},
 		{"splitter sizes", func() error { return s.SetSplitterSizes(ctx, []int{600, 300}) }, func() (any, error) { return s.SplitterSizes(ctx) }, []int{600, 300}},
@@ -70,6 +73,7 @@ func TestSettingDamagedValuesFallBack(t *testing.T) {
 	s := newTestStore(t)
 	for k, v := range map[string]string{
 		KeyAutoCheck: "maybe", KeyAutoCheckDelayS: "-4", KeyFontSize: "big",
+		KeyButtonFontSize: "500", KeyResultsFontSize: "3",
 		KeySelectedLLMID: "x", KeySplitterSizes: "{", KeyWindowGeometry: "***",
 	} {
 		if err := s.SetSetting(ctx, k, v); err != nil {
@@ -82,8 +86,8 @@ func TestSettingDamagedValuesFallBack(t *testing.T) {
 	if n, err := s.AutoCheckDelaySeconds(ctx); err != nil || n != 3 {
 		t.Errorf("AutoCheckDelaySeconds() = %d, %v", n, err)
 	}
-	if n, err := s.FontSize(ctx); err != nil || n != 13 {
-		t.Errorf("FontSize() = %d, %v", n, err)
+	if f, err := s.Fonts(ctx); err != nil || f != DefaultFonts() {
+		t.Errorf("Fonts() = %+v, %v", f, err)
 	}
 	if id, err := s.SelectedLLMID(ctx); err != nil || id != 0 {
 		t.Errorf("SelectedLLMID() = %d, %v", id, err)
@@ -106,6 +110,8 @@ func TestSettingQueryFailures(t *testing.T) {
 		{"get", func(s *Store) error { _, _, err := s.GetSetting(ctx, "k"); return err }, "Store.GetSetting.DatabaseQueryFailed"},
 		{"set", func(s *Store) error { return s.SetSetting(ctx, "k", "v") }, "Store.SetSetting.DatabaseQueryFailed"},
 		{"typed get", func(s *Store) error { _, err := s.AutoCheck(ctx); return err }, "Store.GetSetting.DatabaseQueryFailed"},
+		{"fonts get", func(s *Store) error { _, err := s.Fonts(ctx); return err }, "Store.GetSetting.DatabaseQueryFailed"},
+		{"fonts set", func(s *Store) error { return s.SetFonts(ctx, DefaultFonts()) }, "Store.SetSetting.DatabaseQueryFailed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

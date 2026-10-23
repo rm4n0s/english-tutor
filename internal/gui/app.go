@@ -11,8 +11,11 @@ import (
 	"github.com/rm4n0s/glutter/desktop"
 	"github.com/rm4n0s/glutter/foundation"
 	m "github.com/rm4n0s/glutter/material"
+	"github.com/rm4n0s/glutter/painting"
 	"github.com/rm4n0s/glutter/ui"
 	"github.com/rm4n0s/glutter/widgets"
+
+	"github.com/rm4n0s/english-tutor/internal/store"
 )
 
 // appID is the application ID: the Wayland app_id and the X11 WM_CLASS.
@@ -292,9 +295,8 @@ func (w *MainWindow) OpenURL(url string) {
 
 // Root is the widget to run: a Material app around the main window, with the tray
 // icon and the handling of the close button. The theme follows the system's light
-// or dark setting.
+// or dark setting, and the font of the buttons set on the window.
 func Root(win *MainWindow, tray *Tray, rt *Runtime) widgets.Widget {
-	seed := ui.NewColor(0xFF00725E)
 	home := m.NewBuilder(func(bc widgets.BuildContext) widgets.Widget {
 		rt.Attach(widgets.WidgetsBindingOf(bc))
 		return win.lifecycle(bc, win.Widget())
@@ -303,11 +305,25 @@ func Root(win *MainWindow, tray *Tray, rt *Runtime) widgets.Widget {
 	if tray != nil {
 		content = tray.Wrap(home)
 	}
-	return m.NewMaterialApp(m.MaterialAppOpts{
-		Title:                      "English Tutor",
-		Theme:                      m.NewThemeData(m.ThemeDataOpts{ColorSchemeSeed: m.Some(seed), Brightness: ui.BrightnessLight}),
-		DarkTheme:                  m.NewThemeData(m.ThemeDataOpts{ColorSchemeSeed: m.Some(seed), Brightness: ui.BrightnessDark}),
-		DebugShowCheckedModeBanner: m.Some(false),
-		Home:                       content,
+	return m.NewListenableBuilder(win.fontsChanged, func(widgets.BuildContext, widgets.Widget) widgets.Widget {
+		buttons := win.fonts.Buttons
+		return m.NewMaterialApp(m.MaterialAppOpts{
+			Title:                      "English Tutor",
+			Theme:                      appTheme(ui.BrightnessLight, buttons),
+			DarkTheme:                  appTheme(ui.BrightnessDark, buttons),
+			DebugShowCheckedModeBanner: m.Some(false),
+			Home:                       content,
+		})
+	}, nil)
+}
+
+// appTheme is the theme of the application. The buttons draw their labels in the
+// LabelLarge style, so that style carries their font (and so do the menus).
+func appTheme(brightness ui.Brightness, buttons store.Font) *m.ThemeData {
+	label := painting.NewTextStyle(painting.TextStyleOpts{FontFamily: buttons.Family, FontSize: foundation.Some(pixels(buttons.Size))})
+	return m.NewThemeData(m.ThemeDataOpts{
+		ColorSchemeSeed: m.Some(ui.NewColor(0xFF00725E)),
+		Brightness:      brightness,
+		TextTheme:       m.NewTextTheme(m.TextThemeOpts{LabelLarge: label}),
 	})
 }

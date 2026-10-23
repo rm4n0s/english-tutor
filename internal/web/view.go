@@ -57,13 +57,51 @@ func (w *workspace) signals(sentGoto *int) map[string]any {
 	m := map[string]any{
 		"_title":    windowTitle(w.displayName(), w.modified()),
 		"_modified": w.modified(),
-		"_fs":       w.fontSize,
+		"_fonts":    fontCSS(w.fonts),
 	}
 	if sentGoto != nil && *sentGoto != w.gotoSeq {
 		m["_goto"] = map[string]int{"seq": w.gotoSeq, "pos": w.gotoPos}
 		*sentGoto = w.gotoSeq
 	}
 	return m
+}
+
+// fontCSS is the CSS declarations that give the page its fonts: a family and a
+// size for the editor, the buttons and the results.
+func fontCSS(f store.Fonts) string {
+	var b strings.Builder
+	for _, p := range []struct {
+		name string
+		font store.Font
+	}{{"editor", f.Editor}, {"button", f.Buttons}, {"results", f.Results}} {
+		fmt.Fprintf(&b, "--%s-font: %s; --%s-size: %dpt; ", p.name, cssFontFamily(p.font.Family), p.name, p.font.Size)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// cssFontFamily is a font-family value: the family as a CSS string followed by
+// the page's own fonts, which are all there is for the default family. Quotes,
+// backslashes and control characters are escaped, so a family name cannot end
+// the string.
+func cssFontFamily(family string) string {
+	if family == "" {
+		return "var(--ui-font)"
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range family {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, "\\%x ", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteString(`", var(--ui-font)`)
+	return b.String()
 }
 
 // pageHTML renders the whole page for a browser that has just arrived.

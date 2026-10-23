@@ -121,6 +121,8 @@ Press **Check** again to see what is left. A mistake you already made in this te
 
 **Auto-check** (the box next to Check) checks again by itself when you stop typing for a few seconds. It is off by default. You can turn it on, and set the delay, in **Preferences**, on the **General** tab. Auto-check results are underlined but not counted in the statistics, because a half-written sentence would give false counts. Only the **Check** button counts.
 
+The **General** tab also sets the fonts: one for the editor, one for the buttons and one for the results (the issues list and the explanation), each with its size. The window changes as soon as you pick one.
+
 ## 6. Check only one sentence
 
 Sometimes you have rewritten one sentence and want to check just that one. Select it with the mouse, right-click, and choose **Check**:

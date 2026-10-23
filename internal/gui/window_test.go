@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/rm4n0s/english-tutor/internal/analysis"
 	"github.com/rm4n0s/english-tutor/internal/issues"
 	"github.com/rm4n0s/english-tutor/internal/llm"
+	"github.com/rm4n0s/english-tutor/internal/store"
 	"github.com/rm4n0s/english-tutor/internal/view"
 )
 
@@ -255,12 +257,41 @@ func TestStatusAndTokens(t *testing.T) {
 	}
 }
 
-func TestFontSize(t *testing.T) {
-	_, w := pumpWindow(t)
-	w.SetFontSize(18)
-	w.SetFontSize(0) // ignored
-	if w.FontSize() != 18 {
-		t.Errorf("FontSize() = %d", w.FontSize())
+func TestSetFonts(t *testing.T) {
+	chosen := store.Fonts{Editor: store.Font{Family: "Test Serif", Size: 18}, Buttons: store.Font{Size: 9}, Results: store.Font{Family: "Test Mono", Size: 12}}
+	tests := []struct {
+		name string
+		set  []store.Fonts
+		want store.Fonts
+	}{
+		{"defaults", nil, store.DefaultFonts()},
+		{"every part", []store.Fonts{chosen}, chosen},
+		{"a size below 1 keeps the font of the part", []store.Fonts{chosen, {Editor: store.Font{Family: "Other"}, Buttons: store.Font{Family: "B", Size: 10}, Results: chosen.Results}},
+			store.Fonts{Editor: chosen.Editor, Buttons: store.Font{Family: "B", Size: 10}, Results: chosen.Results}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tester, w := pumpWindow(t)
+			for _, f := range tt.set {
+				w.SetFonts(f)
+			}
+			tester.Pump()
+			if w.Fonts() != tt.want || w.editor.Font() != tt.want.Editor {
+				t.Errorf("fonts %+v, editor %+v; want %+v", w.Fonts(), w.editor.Font(), tt.want)
+			}
+			// The header of the issues list is a title of the results: in their
+			// family, and scaled as their body text is.
+			header := gluttertest.ByText("Issues (0)")
+			theme := m.ThemeOf(tester.Element(header))
+			style := gluttertest.WidgetAs[*m.Text](tester, header).Style()
+			size := theme.TextTheme.TitleSmall.FontSize.OrElse(0) * pixels(tt.want.Results.Size) / theme.TextTheme.BodyMedium.FontSize.OrElse(0)
+			if tt.want.Results.Family != "" && style.FontFamily != tt.want.Results.Family {
+				t.Errorf("header family %q, want %q", style.FontFamily, tt.want.Results.Family)
+			}
+			if math.Abs(style.FontSize.OrElse(0)-size) > 1e-9 {
+				t.Errorf("header size %v, want %v", style.FontSize.OrElse(0), size)
+			}
+		})
 	}
 }
 

@@ -30,7 +30,15 @@
 <form class="form" data-on:change="@post('prefs/general', {contentType: 'form'})" data-on:submit="@post('prefs/general', {contentType: 'form'})">
   <label class="check"><input type="checkbox" name="auto_check" value="1"{{if .General.AutoCheck}} checked{{end}}> Auto-check</label>
   <label>Auto-check delay (seconds)<input type="number" name="delay_s" min="1" max="600" value="{{.General.DelayS}}"></label>
-  <label>Editor font size (points)<input type="number" name="font_size" min="6" max="48" value="{{.General.FontSize}}"></label>
+  {{with .General.Fonts}}
+  <div class="fontrow"><label>Editor font<input type="text" name="editor_family" maxlength="100" placeholder="Default" value="{{.Editor.Family}}"></label>
+    <label>Editor font size (points)<input type="number" name="font_size" min="6" max="48" value="{{.Editor.Size}}"></label></div>
+  <div class="fontrow"><label>Buttons font<input type="text" name="button_family" maxlength="100" placeholder="Default" value="{{.Buttons.Family}}"></label>
+    <label>Buttons font size (points)<input type="number" name="button_size" min="6" max="48" value="{{.Buttons.Size}}"></label></div>
+  <div class="fontrow"><label>Results font<input type="text" name="results_family" maxlength="100" placeholder="Default" value="{{.Results.Family}}"></label>
+    <label>Results font size (points)<input type="number" name="results_size" min="6" max="48" value="{{.Results.Size}}"></label></div>
+  {{end}}
+  <p class="note">A font is named by its family, such as DejaVu Serif; leave it empty for the default. A font this computer does not have falls back to the default. Results are the issues list and the explanation.</p>
   <p class="note">Changes apply and are saved at once.</p>
 </form>
 {{else if .Form}}{{template "llmform" .Form}}
