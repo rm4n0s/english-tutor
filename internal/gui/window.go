@@ -273,7 +273,7 @@ func (w *MainWindow) Show() { w.visible = true; w.refresh() }
 func (w *MainWindow) Present() {
 	w.visible, w.active = true, true
 	if c := w.windowController(); c != nil {
-		c.SetMinimized(false)
+		c.Activate()
 	}
 	w.refresh()
 }
@@ -292,12 +292,12 @@ func (w *MainWindow) Close() {
 	w.Exit()
 }
 
-// Hide takes the window off the screen: it is minimized, and Present brings it
-// back. The application goes on.
+// Hide takes the window off the screen and the task bar, and Present brings it
+// back. The application goes on, and the window keeps its state.
 func (w *MainWindow) Hide() {
 	w.visible = false
 	if c := w.windowController(); c != nil {
-		c.SetMinimized(true)
+		c.SetHidden(true)
 	}
 	w.refresh()
 }

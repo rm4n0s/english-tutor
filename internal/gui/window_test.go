@@ -341,9 +341,15 @@ func TestCloseGoesToTheApplication(t *testing.T) {
 	if w.Visible() {
 		t.Error("Hide takes the window off the screen")
 	}
+	if c := w.windowController(); c == nil || !c.IsHidden() || c.IsMinimized() {
+		t.Error("Hide must hide the platform window, not minimize it")
+	}
 	w.Present()
 	if !w.Visible() || !w.IsActive() {
 		t.Error("Present shows the window again")
+	}
+	if c := w.windowController(); c == nil || c.IsHidden() {
+		t.Error("Present must show the platform window again")
 	}
 	w.Exit()
 	if !w.Quitting() || w.onExitRequested() != ui.AppExitResponseExit {
