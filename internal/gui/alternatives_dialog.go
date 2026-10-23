@@ -1,13 +1,11 @@
 package gui
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/rm4n0s/glutter/foundation"
 	m "github.com/rm4n0s/glutter/material"
 	"github.com/rm4n0s/glutter/painting"
-	"github.com/rm4n0s/glutter/services"
 	"github.com/rm4n0s/glutter/ui"
 	"github.com/rm4n0s/glutter/widgets"
 )
@@ -56,15 +54,7 @@ type AlternativesDialog struct {
 // It is not shown until Show is called.
 func NewAlternativesDialog(win *MainWindow, selected string, hooks AlternativesHooks) *AlternativesDialog {
 	d := &AlternativesDialog{dialogBase: newDialogBase(), win: win, hooks: hooks, selection: ShortSelection(selected), row: -1}
-	d.copyText = func(text string) {
-		if win.rt != nil && win.rt.Binding() != nil {
-			win.rt.Binding().Clipboard().SetData(context.Background(), services.NewClipboardData(text), func(err error) {
-				if err != nil {
-					win.ShowError("Could not copy: " + err.Error())
-				}
-			})
-		}
-	}
+	d.copyText = func(text string) { win.copyToClipboard(text, nil) }
 	d.SetLoading()
 	return d
 }

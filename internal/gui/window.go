@@ -1,12 +1,14 @@
 package gui
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rm4n0s/glutter/foundation"
 	"github.com/rm4n0s/glutter/gestures"
+	"github.com/rm4n0s/glutter/services"
 	"github.com/rm4n0s/glutter/ui"
 	"github.com/rm4n0s/glutter/widgets"
 
@@ -535,6 +537,29 @@ func (w *MainWindow) FileButtonClick(name string) {
 // is starting a new one, so it is handled as New: it asks about unsaved changes
 // and detaches the text from its file.
 func (w *MainWindow) ClearButtonClick() { call(w.handlers.New) }
+
+// CopyButtonClick presses the Copy button above the editor: all the text of the
+// editor goes to the clipboard. With no text there is nothing to copy.
+func (w *MainWindow) CopyButtonClick() {
+	if text := w.editor.Text(); text != "" {
+		w.copyToClipboard(text, func() { w.SetStatus("Copied the text to the clipboard") })
+	}
+}
+
+// copyToClipboard puts text on the clipboard and then calls done, which may be
+// nil. A failure is shown in the banner.
+func (w *MainWindow) copyToClipboard(text string, done func()) {
+	if w.rt == nil || w.rt.Binding() == nil {
+		return
+	}
+	w.rt.Binding().Clipboard().SetData(context.Background(), services.NewClipboardData(text), func(err error) {
+		if err != nil {
+			w.ShowError("Could not copy: " + userMessage(err))
+			return
+		}
+		call(done)
+	})
+}
 
 // LegendButtonClick clicks the legend entry of a category.
 func (w *MainWindow) LegendButtonClick(c analysis.Category) {

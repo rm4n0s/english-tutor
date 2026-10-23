@@ -60,7 +60,7 @@ func TestNewWindowStartsEmptyAndDisabled(t *testing.T) {
 		t.Errorf("status bar: %q | %q | %q", w.StatusText(), w.WordsText(), w.TokensText())
 	}
 	for _, text := range []string{"Check", "Statistics", "Preferences", "New", "Open", "Save", "Save As", "Save to library", "Library",
-		"Clear", "Auto-check", "Legend:", "Issues (0)", "Press Check to find errors", "Ready", "0 words"} {
+		"Copy", "Clear", "Auto-check", "Legend:", "Issues (0)", "Press Check to find errors", "Ready", "0 words"} {
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(text)); err != nil {
 			t.Errorf("the window should show %q: %v", text, err)
 		}
@@ -254,6 +254,37 @@ func TestStatusAndTokens(t *testing.T) {
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(text)); err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+func TestCopyButtonCopiesAllTheText(t *testing.T) {
+	tests := []struct {
+		name, text, want string
+		copied           bool
+	}{
+		{"empty editor: Copy is disabled and the clipboard is left alone", "", "old", false},
+		{"every line", "First line.\nSecond line, with a mistake we was making.\n", "First line.\nSecond line, with a mistake we was making.\n", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tester, w := pumpWindow(t)
+			tester.SetClipboardText("old")
+			w.SetText(tt.text)
+			tester.Pump()
+			tapText(t, tester, "Copy")
+			if tt.copied {
+				waitFor(t, tester, func() bool { return w.StatusText() == "Copied the text to the clipboard" })
+			} else {
+				tester.FlushPosted()
+				tester.Pump()
+			}
+			if got, _ := tester.ClipboardText(); got != tt.want {
+				t.Errorf("clipboard %q, want %q", got, tt.want)
+			}
+			if !tt.copied && w.StatusText() != "Ready" {
+				t.Errorf("status %q", w.StatusText())
+			}
+		})
 	}
 }
 
