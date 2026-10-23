@@ -1,11 +1,8 @@
 package logging
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
-
-	"github.com/rm4n0s/errors"
 
 	"github.com/rm4n0s/english-tutor/internal/config"
 )
@@ -30,18 +27,11 @@ func New(paths config.Paths, stderr io.Writer) (*slog.Logger, io.Closer) {
 	return slog.New(slog.NewTextHandler(file, nil)), file
 }
 
-// LogError logs err at error level. Errors from github.com/rm4n0s/errors are
-// logged as their JSON form so they can be replayed in tests.
+// LogError logs err at error level. Errors from github.com/rm4n0s/errors
+// implement slog.LogValuer, so their tag, route, metadata and stack frames are
+// logged as a group that can be replayed in tests via errors.ErrorJson.
 func LogError(logger *slog.Logger, msg string, err error) {
-	if appErr, ok := errors.FromError(err); ok {
-		if j, jerr := appErr.ToJson(); jerr == nil {
-			if b, merr := json.Marshal(j); merr == nil {
-				logger.Error(msg, "error", string(b))
-				return
-			}
-		}
-	}
-	logger.Error(msg, "error", err.Error())
+	logger.Error(msg, "err", err)
 }
 
 type nopCloser struct{}

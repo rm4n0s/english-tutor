@@ -3,8 +3,8 @@ module github.com/rm4n0s/english-tutor
 go 1.27.0
 
 require (
-	github.com/rm4n0s/errors v0.0.0-20260824195921-8423e20ff67e
-	github.com/rm4n0s/glutter v1.4.1-0.20261023073911-303151be543a
+	github.com/rm4n0s/errors v0.2.0
+	github.com/rm4n0s/glutter v1.5.1
 	github.com/tmc/langchaingo v0.1.15
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2

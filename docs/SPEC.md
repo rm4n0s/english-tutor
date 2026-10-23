@@ -419,7 +419,7 @@ Settings keys: `selected_llm_id`, `auto_check`, `auto_check_delay_s`, `font_size
 
 API keys are stored in plain text in the database file. The `0600` permissions are the only protection. The Preferences dialog states this next to the API key field. Keys are never written to logs, error metadata or error messages.
 
-**Logs** are written to `~/.english-tutor/logs/english-tutor.log` (directory `0700`, file `0600`) using the standard library `log/slog`. The file is rotated by size (5 MB, 3 old files kept) by a small handler in `internal/logging`, without a new dependency. Errors are logged as `appErr.ToJson()`. API keys, the user's text and the LLM's replies are never logged. Token counts and timings are. If the log file cannot be opened, the app logs to stderr and continues.
+**Logs** are written to `~/.english-tutor/logs/english-tutor.log` (directory `0700`, file `0600`) using the standard library `log/slog`. The file is rotated by size (5 MB, 3 old files kept) by a small handler in `internal/logging`, without a new dependency. Errors are logged with `slog` as `"err", err`, which writes the tag, route, metadata and stack frames. API keys, the user's text and the LLM's replies are never logged. Token counts and timings are. If the log file cannot be opened, the app logs to stderr and continues.
 
 A `Store` type wraps `*gorm.DB` and is constructed with an open database, so tests use an in-memory SQLite and production code uses the file. There is no package-level database variable.
 
@@ -479,7 +479,7 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `FileNotUTF8` | `app` | opened file is not valid UTF-8, or contains a NUL byte |
 
 - The check prompt is retried once with a "return valid JSON only" reminder before `LLMResponseInvalid` is returned. Code fences around the JSON are stripped before parsing.
-- The UI shows the `Message` of an error to the user in a non-modal banner and logs `appErr.ToJson()`.
+- The UI shows the `Message` of an error to the user in a non-modal banner and logs the error with `slog` as `"err", err`.
 - Cancelling is not an error (section 5.1). A cancelled context is recognised before any error tag is created, so it produces no banner and no log entry above info level.
 
 ## 11. Testing

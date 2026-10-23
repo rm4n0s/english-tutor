@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -227,11 +228,6 @@ func TestLogError(t *testing.T) {
 		err  error
 		want []string
 	}{
-		{
-			name: "app error is logged as JSON",
-			err:  errors.New("SomeTag", "boom", "k", "v"),
-			want: []string{`SomeTag`, `boom`, `\"k\":\"v\"`},
-		},
 		{name: "plain error is logged as text", err: os.ErrNotExist, want: []string{"file does not exist"}},
 	}
 	for _, tt := range tests {
@@ -244,5 +240,24 @@ func TestLogError(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLogErrorReplay(t *testing.T) {
+	var buf bytes.Buffer
+	LogError(slog.New(slog.NewJSONHandler(&buf, nil)), "failed", errors.New("SomeTag", "boom", "k", "v"))
+
+	var entry struct {
+		Err errors.ErrorJson `json:"err"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("log entry is not replayable JSON: %v\n%s", err, buf.String())
+	}
+	logged := entry.Err
+	if logged.Tag != "SomeTag" || logged.Message != "boom" || logged.Metadata["k"] != "v" {
+		t.Errorf("logged error = %+v", logged)
+	}
+	if !logged.HasRoute("TestLogErrorReplay.SomeTag") {
+		t.Errorf("unexpected logged route: %s", logged.Route())
 	}
 }

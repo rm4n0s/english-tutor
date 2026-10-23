@@ -59,7 +59,7 @@ Use `github.com/rm4n0s/errors` for all errors. Never use `fmt.Errorf`, and never
   }
   ```
 - A route lists the call chain from outermost to innermost (`Type.Method` or `Func`, joined by `->`) and ends with the Tag. `HasRoute` matches by substring
-- Log errors with `appErr.ToJson()` so they can be replayed in a test via `errors.FromJson`
+- Log errors with `slog` as `"err", err` (do not call `ToJson` or `json.Marshal` yourself): `*errors.Error` is a `slog.LogValuer`, and the logged object unmarshals into `errors.ErrorJson` so it can be replayed in a test
 
 ## Git and GitHub
 - Never commit or push directly to `main`; work on a branch named `feat/...` or `fix/...`
