@@ -523,6 +523,11 @@ func (w *MainWindow) FileButtonClick(name string) {
 	call(h[name])
 }
 
+// ClearButtonClick presses the Clear button above the editor. Clearing the text
+// is starting a new one, so it is handled as New: it asks about unsaved changes
+// and detaches the text from its file.
+func (w *MainWindow) ClearButtonClick() { call(w.handlers.New) }
+
 // LegendButtonClick clicks the legend entry of a category.
 func (w *MainWindow) LegendButtonClick(c analysis.Category) {
 	on, ok := w.legendOn[c]

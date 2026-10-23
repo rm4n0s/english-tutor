@@ -187,7 +187,12 @@ func (w *MainWindow) leftPane(bc widgets.BuildContext) widgets.Widget {
 			m.NewTextButton(func() { w.LegendButtonClick(c) }, label)))
 	}
 	return m.NewColumn([]widgets.Widget{
-		m.NewPadding(painting.NewEdgeInsetsSymmetric(0, 8), m.NewWrap(legend, m.WrapOpts{Spacing: 4, CrossAxisAlignment: m.WrapCrossAlignmentCenter})),
+		m.NewPadding(painting.NewEdgeInsetsSymmetric(0, 8), m.NewRow([]widgets.Widget{
+			m.NewExpanded(m.NewWrap(legend, m.WrapOpts{Spacing: 4, CrossAxisAlignment: m.WrapCrossAlignmentCenter})),
+			gap(8),
+			tip("Remove all the text from the editor, like New (asks first if there are unsaved changes)",
+				m.NewOutlinedButton(w.ClearButtonClick, m.NewText("Clear"))),
+		})),
 		m.NewExpanded(w.editor.Widget()),
 	}, m.ColumnOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch})
 }

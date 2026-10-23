@@ -58,7 +58,7 @@ func TestNewWindowStartsEmptyAndDisabled(t *testing.T) {
 		t.Errorf("status bar: %q | %q | %q", w.StatusText(), w.WordsText(), w.TokensText())
 	}
 	for _, text := range []string{"Check", "Statistics", "Preferences", "New", "Open", "Save", "Save As", "Save to library", "Library",
-		"Auto-check", "Legend:", "Issues (0)", "Press Check to find errors", "Ready", "0 words"} {
+		"Clear", "Auto-check", "Legend:", "Issues (0)", "Press Check to find errors", "Ready", "0 words"} {
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(text)); err != nil {
 			t.Errorf("the window should show %q: %v", text, err)
 		}
@@ -169,10 +169,10 @@ func TestToolbarButtonsReportToTheirHandlers(t *testing.T) {
 	w.SetHandlers(Handlers{Statistics: rec("stats"), Preferences: rec("prefs"), WebToggle: rec("web"),
 		New: rec("new"), Open: rec("open"), Save: rec("save"), SaveAs: rec("saveas"),
 		SaveToLibrary: rec("tolib"), Library: rec("lib")})
-	for _, text := range []string{"Statistics", "Preferences", webStartText, "New", "Open", "Save", "Save As", "Save to library", "Library"} {
+	for _, text := range []string{"Statistics", "Preferences", webStartText, "New", "Open", "Save", "Save As", "Save to library", "Library", "Clear"} {
 		tapText(t, tester, text)
 	}
-	want := []string{"stats", "prefs", "web", "new", "open", "save", "saveas", "tolib", "lib"}
+	want := []string{"stats", "prefs", "web", "new", "open", "save", "saveas", "tolib", "lib", "new"} // Clear starts a new text
 	if !slices.Equal(got, want) {
 		t.Errorf("reports = %v, want %v", got, want)
 	}
@@ -182,7 +182,7 @@ func TestUnsetHandlersAreHarmless(t *testing.T) {
 	tester, w := pumpWindow(t)
 	w.SetLLMs(choices(), 3)
 	tester.Pump()
-	for _, text := range []string{"Check", "Statistics", "Preferences", "New", "Save to library"} {
+	for _, text := range []string{"Check", "Statistics", "Preferences", "New", "Save to library", "Clear"} {
 		tapText(t, tester, text)
 	}
 	w.TypeIntoEditor("hello")

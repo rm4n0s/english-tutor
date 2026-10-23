@@ -382,7 +382,7 @@ When the user chooses **Alternative** on a selection (section 4.2), a request as
 Two independent mechanisms:
 
 **Files**
-- *New* clears the editor (asks first if there are unsaved changes).
+- *New* clears the editor (asks first if there are unsaved changes). The *Clear* button above the editor, at the right of the legend, does the same.
 - *Open* loads a `.txt` or `.md` file as UTF-8. Invalid UTF-8 is rejected with a message.
 - *Save* writes to the current path, or behaves like *Save As* if there is none.
 - *Save As* opens a file dialog (`.txt`, `.md`).

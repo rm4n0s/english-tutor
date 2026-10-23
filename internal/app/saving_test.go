@@ -155,6 +155,23 @@ func TestNewClearsEverything(t *testing.T) {
 	}
 }
 
+func TestClearButtonEmptiesTheEditorLikeNew(t *testing.T) {
+	h, fd := newSavingHarness(t, twoIssues())
+	h.checked(nil)
+	h.onUI(func() { h.a.win.SetModified(true) })
+	fd.unsaved = UnsavedDiscard
+
+	h.onUI(func() { h.a.win.ClearButtonClick() })
+	h.onUI(func() {
+		if h.a.win.Text() != "" || h.a.win.Modified() || len(h.a.state.Items()) != 0 {
+			t.Errorf("text %q modified %v items %d", h.a.win.Text(), h.a.win.Modified(), len(h.a.state.Items()))
+		}
+	})
+	if len(fd.unsavedAsked) != 1 {
+		t.Errorf("asked = %v: the text had unsaved changes", fd.unsavedAsked)
+	}
+}
+
 func TestNewAsksOnlyWhenThereAreUnsavedChanges(t *testing.T) {
 	h, fd := newSavingHarness(t)
 	h.onUI(func() { h.a.onNew() })
