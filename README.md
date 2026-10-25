@@ -51,7 +51,7 @@ go install github.com/rm4n0s/english-tutor/cmd/english-tutor@latest
 english-tutor
 ```
 
-The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. There are no tagged versions yet, so `@latest` is the newest commit of `main`; use `@main` to say so, or a commit hash to pin one. From a clone, `go install ./cmd/english-tutor` does the same. The first build is slow, like `go build`.
+The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. `@latest` is the newest tagged version (see the [tags](https://github.com/rm4n0s/english-tutor/tags)); use a tag such as `@v0.1.1` to pin one, or `@main` for the newest commit, which may not be tagged yet. Right after a new tag is pushed, Go's module proxy can still answer "unknown revision" for a few minutes; run the command with `GOPROXY=direct` to skip it. From a clone, `go install ./cmd/english-tutor` does the same. The first build is slow, like `go build`.
 
 ### Add it to the application menu
 
