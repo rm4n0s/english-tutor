@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/rm4n0s/errors"
 	"github.com/rm4n0s/glutter/ui"
@@ -12,9 +13,13 @@ import (
 
 	"github.com/rm4n0s/english-tutor/internal/config"
 	"github.com/rm4n0s/english-tutor/internal/gui"
+	"github.com/rm4n0s/english-tutor/internal/instance"
 	"github.com/rm4n0s/english-tutor/internal/logging"
 	"github.com/rm4n0s/english-tutor/internal/store"
 )
+
+// notifyTimeout is how long a second launch waits for the running copy to answer.
+const notifyTimeout = 3 * time.Second
 
 // Run starts the application and returns its exit code. It prepares
 // ~/.english-tutor, opens the log and the database, and runs the window until it
@@ -51,6 +56,23 @@ func Run(args []string) int {
 	if err := paths.Ensure(); err != nil {
 		return fatal(err)
 	}
+
+	// Only one copy runs: a second launch asks the first to show its window and
+	// ends. This comes before the log and the database, which the first copy owns.
+	guard, first, err := instance.Acquire(paths.DataDir)
+	if err != nil {
+		return fatal(err)
+	}
+	if !first {
+		return showRunningCopy(ctx, paths.DataDir)
+	}
+	defer func() {
+		if err := guard.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "english-tutor: releasing the instance lock:", userMessage(err))
+		}
+		guard.Wait()
+	}()
+
 	log, closeLog := logging.New(paths, os.Stderr)
 	defer func() {
 		if err := closeLog.Close(); err != nil {
@@ -73,6 +95,8 @@ func Run(args []string) int {
 	a := New(ctx, log, st)
 	a.Show()
 	a.EnableTray()
+	// A second launch brings this window back, as the tray's Open item does.
+	guard.Serve(func() { a.rt.Post(a.win.Present) })
 	width, height := a.win.WindowSize()
 	code := 0
 	err = widgets.RunApp(a.Root(), widgets.RunAppOpts{
@@ -106,6 +130,18 @@ func Run(args []string) int {
 func fatal(err error) int {
 	fmt.Fprintln(os.Stderr, "english-tutor: English Tutor cannot start.\n\n"+userMessage(err))
 	return 1
+}
+
+// showRunningCopy is what a second launch does: it asks the copy that is running
+// to show its window, and ends.
+func showRunningCopy(ctx context.Context, dir string) int {
+	ctx, cancel := context.WithTimeout(ctx, notifyTimeout)
+	defer cancel()
+	if err := instance.Notify(ctx, dir); err != nil {
+		fmt.Fprintln(os.Stderr, "english-tutor: English Tutor is already running, but it did not answer:", userMessage(err))
+		return 1
+	}
+	return 0
 }
 
 // fatalSetup tells the user why -setup-desktop failed and returns the exit code.

@@ -87,6 +87,8 @@ It writes a desktop entry to `~/.local/share/applications/dev.rm4n0s.english-tut
 
 English Tutor stays in the system tray. Closing the window with the X button only hides it; your text and any running check are kept. Use the tray icon to come back: click it or choose **Open**. Choose **Close** in the tray menu to quit; if the text has unsaved changes you are asked to save, discard or cancel first.
 
+Only one copy runs at a time. Starting English Tutor again, from the menu or a terminal, shows the window of the copy that is already running instead of opening a second tray icon.
+
 If your desktop has no system tray (some GNOME setups need an AppIndicator extension), the X button quits the application as usual.
 
 ## Web server

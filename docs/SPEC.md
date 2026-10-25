@@ -75,7 +75,9 @@ Dependencies and constraints:
 - The status bar shows the issue count, the check state (idle, checking, cancelled, failed), the word count, and the input / output tokens of the last request and of the session (section 5.8).
 
 - **Check finished notification.** When a manual check (not an auto-check) ends with a result or a failure while the main window is not the active window (another application has the focus, the window is minimised, or it is hidden in the tray), the application shows a desktop message next to the tray icon, "Check finished" with the status text (for example "3 issues" or "No errors found") or "Check failed" with the message of the error, and asks the desktop to draw attention to the window (a flashing taskbar entry, for example). Clicking the message opens the window. A check the user cancelled, one whose result was discarded because the text changed, and a check that ends while the window is active do not notify. Without a system tray only the attention request is made. The web page does not notify.
-- **System tray:** when the desktop has a system tray, the application lives in it. Closing the window (the X button) only hides it (the window is minimised): the text, a running check and the auto-check timer are left as they are, and the window state is saved. The tray icon has a menu with **Open**, which shows the same window again (restoring it if minimised), **Start web server** (**Stop web server** while it runs), **Open web page** (enabled while it runs; section 4.7), and **Close**, which quits the application; clicking the icon also opens the window. Quitting asks about unsaved changes first (Save, Discard, Cancel), with the window brought to the front for the question; Cancel keeps the application running. If the desktop has no system tray, nothing is hidden: closing the window asks about unsaved changes and quits, as it would without this feature.
+- **System tray:** when the desktop has a system tray, the application lives in it. Closing the window (the X button) only hides it (the window is minimised): the text, a running check and the auto-check timer are left as they are, and the window state is saved. The tray icon has a menu with **Open**, which shows the same window again (restoring it if minimised), **Start web server** (**Stop web server** while it runs), **Open web page** (enabled while it runs; section 4.7), and **Close**, which quits the application; clicking the icon also opens the window. Quitting asks about unsaved changes first (Save, Discard, Cancel), with the window brought to the front for the question; Cancel keeps the application running. **One copy at a time.** Starting the program while a copy of it is running (same user, same data directory) does not open a second window or a second tray icon: the new process asks the running copy to show its window, in the same way as the tray's **Open** item (restoring it if it was minimised or hidden in the tray), and exits with code 0. The check is made before the log and the database are opened. The running copy holds an exclusive lock on `~/.english-tutor/instance.lock` and listens on the Unix socket `~/.english-tutor/instance.sock` (the folder is mode 0700); a socket left by a copy that crashed is replaced, because the lock is released by the system when a process ends. If the running copy does not answer within 3 seconds the new process says so on stderr and exits with code 1. `-setup-desktop` does not take part: it needs no running copy and does not look for one. On Wayland the desktop may only flash the taskbar entry instead of raising the window, because it decides who may take the focus.
+
+If the desktop has no system tray, nothing is hidden: closing the window asks about unsaved changes and quits, as it would without this feature.
 
 ### 4.2 Text editor
 
@@ -438,6 +440,7 @@ A `Store` type wraps `*gorm.DB` and is constructed with an open database, so tes
 ```
 cmd/english-tutor/        main.go: wiring only
 internal/config/          data directory and path resolution
+internal/instance/        the single-instance lock and the socket a second launch uses
 internal/menuentry/       the application-menu entry and icon written by -setup-desktop
 internal/logging/         slog setup, size-rotated log file in ~/.english-tutor/logs
 internal/store/           gorm models, numbered migrations, Store
@@ -480,6 +483,10 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `DesktopEntryWriteFailed` | `menuentry` | `-setup-desktop` cannot write the desktop entry or the icon under the data directory |
 | `ExecutablePathNotFound` | `app` | `-setup-desktop` cannot find the path of the running program |
 | `IconEncodeFailed` | `gui` | the application icon cannot be encoded as a PNG |
+| `InstanceLockFailed` | `instance` | the lock file in the data directory cannot be opened or locked |
+| `InstanceSocketFailed` | `instance` | the socket a second launch talks to cannot be made (path too long, no permission) |
+| `InstanceNotifyFailed` | `instance` | a second launch cannot reach the running copy within 3 seconds |
+| `InstanceCloseFailed` | `instance` | releasing the lock or the socket at exit fails (shown on stderr) |
 | `LogFileOpenFailed` | `logging` | the log file cannot be opened (the app falls back to stderr) |
 | `LogRotateFailed` | `logging` | the log file cannot be rotated (the record is still written to the current file) |
 | `UnknownProvider` | `llm` | provider string is not supported |
