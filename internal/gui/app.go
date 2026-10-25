@@ -1,10 +1,13 @@
 package gui
 
 import (
+	"bytes"
 	"context"
 	"image"
 	"image/color"
 	"image/draw"
+	"image/png"
+	"io"
 	"path/filepath"
 
 	"github.com/rm4n0s/errors"
@@ -200,8 +203,32 @@ func (t *Tray) Wrap(child widgets.Widget) widgets.Widget {
 	}, nil)
 }
 
-// trayIcon draws the icon of the tray: a green disc with a white page on it.
+// trayIcon makes the icon of the tray from the application's icon.
 func trayIcon() (ui.WindowIcon, error) {
+	img := iconImage()
+	return desktop.TrayIconFromRGBA(img.Rect.Dx(), img.Pix)
+}
+
+// IconPNG returns the application's icon as a PNG, for the application menu.
+func IconPNG() ([]byte, error) {
+	var buf bytes.Buffer
+	if err := writeIconPNG(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// writeIconPNG writes the application's icon to w as a PNG.
+func writeIconPNG(w io.Writer) error {
+	if err := png.Encode(w, iconImage()); err != nil {
+		return errors.NewErr("IconEncodeFailed", err)
+	}
+	return nil
+}
+
+// iconImage draws the icon of the application: a green disc with a white page
+// on it.
+func iconImage() *image.NRGBA {
 	const size = 64
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	green := color.NRGBA{R: 0x00, G: 0x72, B: 0x5E, A: 0xFF}
@@ -219,7 +246,7 @@ func trayIcon() (ui.WindowIcon, error) {
 		y := 22 + line*8
 		draw.Draw(img, image.Rect(24, y, 40, y+2), image.NewUniform(green), image.Point{}, draw.Src)
 	}
-	return desktop.TrayIconFromRGBA(size, img.Pix)
+	return img
 }
 
 // ---- Files and links ----

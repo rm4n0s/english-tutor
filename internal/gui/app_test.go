@@ -1,6 +1,9 @@
 package gui
 
 import (
+	"bytes"
+	"image/png"
+	"io"
 	"slices"
 	"testing"
 	"time"
@@ -150,4 +153,33 @@ func TestCategoryColoursReachTheUnderlines(t *testing.T) {
 		seen[key] = true
 	}
 	_ = analysis.Grammar
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestIconPNG(t *testing.T) {
+	data, err := IconPNG()
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("not a PNG: %v", err)
+	}
+	if b := img.Bounds(); b.Dx() != 64 || b.Dy() != 64 {
+		t.Errorf("icon is %dx%d, want 64x64", b.Dx(), b.Dy())
+	}
+}
+
+func TestWriteIconPNGFailure(t *testing.T) {
+	err := writeIconPNG(failingWriter{})
+	appErr, ok := errors.FromError(err)
+	if !ok {
+		t.Fatalf("expected *errors.Error, got %T", err)
+	}
+	if !appErr.HasRoute("writeIconPNG.IconEncodeFailed") {
+		t.Errorf("unexpected failure path: %s", appErr.Route())
+	}
 }

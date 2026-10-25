@@ -400,6 +400,15 @@ Two independent mechanisms:
   - If moving the recorded mistakes to a new source fails (Save As), the text still switches source and the failure is shown in the banner. A mistake recorded by a check that was still being saved when Save As happened can stay under the old source.
 - Issues (underlines) are not stored, so a loaded text must be checked again. Recorded mistakes (section 5.7) are stored; checking a loaded text again does not count them twice.
 
+### 7.1 Application menu entry
+
+`english-tutor -setup-desktop` adds the application to the desktop's application menu and exits, without opening the window, the log or the database. It writes, under `$XDG_DATA_HOME` (`~/.local/share` when unset or not an absolute path):
+
+- `applications/dev.rm4n0s.english-tutor.desktop`: a freedesktop desktop entry named after the application ID, so the window's Wayland `app_id` and X11 `WM_CLASS` (`StartupWMClass`) match it. `Exec` is the absolute path of the running program with symbolic links resolved (quoted and escaped as the desktop entry specification requires), `Icon` is the application ID, `Terminal=false`.
+- `icons/hicolor/64x64/apps/dev.rm4n0s.english-tutor.png`: the same drawing as the tray icon.
+
+Both files are written through a temporary file renamed over the target, so running the flag again (after moving or rebuilding the program) replaces them. The icon is written first. The program prints where it wrote the files, or, on failure, the reason, and exits with 1. Nothing outside the user's data directory is touched. The entry points at the program that ran the flag, so it should be run from the installed binary and not from `go run`.
+
 ## 8. Data storage
 
 Location: `~/.english-tutor/` (created with mode `0700`). The database file is `~/.english-tutor/english-tutor.db`, created and kept at mode `0600`. The home directory is resolved with `os.UserHomeDir`.
@@ -429,6 +438,7 @@ A `Store` type wraps `*gorm.DB` and is constructed with an open database, so tes
 ```
 cmd/english-tutor/        main.go: wiring only
 internal/config/          data directory and path resolution
+internal/menuentry/       the application-menu entry and icon written by -setup-desktop
 internal/logging/         slog setup, size-rotated log file in ~/.english-tutor/logs
 internal/store/           gorm models, numbered migrations, Store
 internal/llm/             Provider enum, ModelConfig -> langchaingo llms.Model factory, token usage extraction
@@ -467,6 +477,9 @@ All errors use `github.com/rm4n0s/errors` as described in CLAUDE.md. Each failur
 | `WebPasswordInvalid` | `web` | the web server password has fewer than 8 characters or is too long |
 | `WebServerAlreadyRunning` | `web` | the web server is started while it runs |
 | `WebServerStartFailed` | `web` | the web server cannot listen on its port (in use, no permission) |
+| `DesktopEntryWriteFailed` | `menuentry` | `-setup-desktop` cannot write the desktop entry or the icon under the data directory |
+| `ExecutablePathNotFound` | `app` | `-setup-desktop` cannot find the path of the running program |
+| `IconEncodeFailed` | `gui` | the application icon cannot be encoded as a PNG |
 | `LogFileOpenFailed` | `logging` | the log file cannot be opened (the app falls back to stderr) |
 | `LogRotateFailed` | `logging` | the log file cannot be rotated (the record is still written to the current file) |
 | `UnknownProvider` | `llm` | provider string is not supported |

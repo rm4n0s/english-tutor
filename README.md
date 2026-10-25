@@ -53,6 +53,16 @@ english-tutor
 
 The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `~/go/bin`) when `GOBIN` is not set; add that folder to your `PATH` to start it by name. There are no tagged versions yet, so `@latest` is the newest commit of `main`; use `@main` to say so, or a commit hash to pin one. From a clone, `go install ./cmd/english-tutor` does the same. The first build is slow, like `go build`.
 
+### Add it to the application menu
+
+To find English Tutor in your desktop's application menu (the "start menu"), run the installed program once with:
+
+```
+english-tutor -setup-desktop
+```
+
+It writes a desktop entry to `~/.local/share/applications/dev.rm4n0s.english-tutor.desktop` and an icon to `~/.local/share/icons/hicolor/64x64/apps/`, using `$XDG_DATA_HOME` instead of `~/.local/share` when that is set, and then exits. The entry points at the program you ran, so run it from where the program will stay; if you move it later, run the flag again. Delete the two files to remove the entry. Some desktops need a moment, or a new login, before the menu shows it.
+
 ## First steps
 
 1. Click **Preferences** and add an LLM on the LLMs tab:

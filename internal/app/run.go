@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -17,15 +18,34 @@ import (
 
 // Run starts the application and returns its exit code. It prepares
 // ~/.english-tutor, opens the log and the database, and runs the window until it
-// ends. With a system tray, closing the window hides it and the tray's Close item
+// ends. With -setup-desktop it only adds the application to the desktop's menu
+// and returns. With a system tray, closing the window hides it and the tray's Close item
 // ends the application; without one, closing the window ends it.
 func Run(args []string) int {
+	flags := flag.NewFlagSet("english-tutor", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	setup := flags.Bool("setup-desktop", false, "add English Tutor to the application menu (a desktop entry and an icon under ~/.local/share), then exit")
+	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	home, err := config.HomeDir()
 	if err != nil {
 		return fatal(err)
+	}
+	if *setup {
+		summary, err := setupDesktop(home, os.Executable)
+		if err != nil {
+			return fatalSetup(err)
+		}
+		fmt.Println(summary)
+		return 0
 	}
 	paths := config.NewPaths(home)
 	if err := paths.Ensure(); err != nil {
@@ -84,10 +104,12 @@ func Run(args []string) int {
 // code. The message of an application error is written for the user; anything
 // else is shown as it is.
 func fatal(err error) int {
-	msg := err.Error()
-	if appErr, ok := errors.FromError(err); ok {
-		msg = appErr.Message
-	}
-	fmt.Fprintln(os.Stderr, "english-tutor: English Tutor cannot start.\n\n"+msg)
+	fmt.Fprintln(os.Stderr, "english-tutor: English Tutor cannot start.\n\n"+userMessage(err))
+	return 1
+}
+
+// fatalSetup tells the user why -setup-desktop failed and returns the exit code.
+func fatalSetup(err error) int {
+	fmt.Fprintln(os.Stderr, "english-tutor: the application menu entry was not made:", userMessage(err))
 	return 1
 }
