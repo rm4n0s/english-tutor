@@ -26,8 +26,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/rm4n0s/errors v0.2.0 h1:IM8Ug6x0ylxcWaH1P0vl79qiTM6pJb3DTe+9lBT83+0=
 github.com/rm4n0s/errors v0.2.0/go.mod h1:i/xNeA3IMMgyVwttn7tC4nny2Vqgff18R0rKevqSx8E=
-github.com/rm4n0s/glutter v1.5.1 h1:kHMophoaFhQRptOySm8c562PtQZZKlW1DvSCHl6k4pg=
-github.com/rm4n0s/glutter v1.5.1/go.mod h1:7qG+8cWByltX/yOzrOYXK+APoZsWi7BId3ZIQt4o74w=
+github.com/rm4n0s/glutter v1.9.4 h1:nYDL/sBnYFH+GJCugD0diUZdqhY/ifJ6Mt2I92EaKbw=
+github.com/rm4n0s/glutter v1.9.4/go.mod h1:7qG+8cWByltX/yOzrOYXK+APoZsWi7BId3ZIQt4o74w=
 github.com/stretchr/objx v0.5.2 h1:xuMeJ0Sdp5ZMRXx/aWO6RZxdr3beISkG5/G/aIRr3pY=
 github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/8L+MA=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
