@@ -7,7 +7,6 @@ package instance
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -76,7 +75,15 @@ func Acquire(dir string) (g *Guard, first bool, err error) {
 	if err != nil {
 		return nil, false, socketFailure(err, sockPath, lock)
 	}
-	l, err := net.Listen("unix", socketPath(dirFile))
+	addr, err := socketPath(dirFile)
+	if err != nil {
+		return nil, false, socketFailure(err, sockPath, lock, dirFile)
+	}
+	if err := os.Remove(addr); err != nil && !os.IsNotExist(err) {
+		// The address is not the file of the directory when the directory's name is too long for it (socket_other.go).
+		return nil, false, socketFailure(err, sockPath, lock, dirFile)
+	}
+	l, err := net.Listen("unix", addr)
 	if err != nil {
 		return nil, false, socketFailure(err, sockPath, lock, dirFile)
 	}
@@ -93,15 +100,6 @@ func socketFailure(err error, sockPath string, files ...*os.File) error {
 		}
 	}
 	return appErr
-}
-
-// socketPath names the socket inside an open directory through /proc, which
-// keeps the path short. A socket address holds only about 107 bytes, and the
-// data directory sits under a home that can be named at any length. While the
-// directory stays open the name works for Listen, for Dial and for the removal of
-// the socket file when its listener closes.
-func socketPath(dir *os.File) string {
-	return fmt.Sprintf("/proc/self/fd/%d/%s", dir.Fd(), socketName)
 }
 
 // Serve answers the second copies that call Notify: onShow is called, on a
@@ -176,8 +174,12 @@ func Notify(ctx context.Context, dir string) error {
 // the command.
 func dial(ctx context.Context, dirFile *os.File, sockPath string) error {
 	var d net.Dialer
+	addr, err := socketPath(dirFile)
+	if err != nil {
+		return errors.NewErr("InstanceNotifyFailed", err).SetMetadata("path", sockPath)
+	}
 	for {
-		conn, err := d.DialContext(ctx, "unix", socketPath(dirFile))
+		conn, err := d.DialContext(ctx, "unix", addr)
 		if err == nil {
 			return send(conn, sockPath)
 		}

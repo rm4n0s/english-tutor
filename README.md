@@ -2,7 +2,7 @@
 
 A desktop app for practising written English. You write a sentence or an essay in a text editor, an LLM finds the grammar, syntax and vocabulary errors, and the app underlines them. Select an error and the app explains why it is wrong and shows better ways to say it, in markdown, next to the editor. It also counts how often you make each kind of mistake, so you can see what to work on.
 
-Written in Go with [glutter](https://github.com/rm4n0s/glutter) (a Flutter-style toolkit for Linux, no Qt) and [langchaingo](https://github.com/tmc/langchaingo). Works with Ollama, any OpenAI-compatible server, and Anthropic.
+Written in Go with [glutter](https://github.com/rm4n0s/glutter) (a Flutter-style toolkit for Linux, Windows and macOS, no Qt) and [langchaingo](https://github.com/tmc/langchaingo). Works with Ollama, any OpenAI-compatible server, and Anthropic.
 
 **New here?** The [tutorial](docs/TUTORIAL.md) walks through the app with screenshots. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
@@ -20,8 +20,8 @@ Written in Go with [glutter](https://github.com/rm4n0s/glutter) (a Flutter-style
 ## Requirements
 
 - Go 1.27 or newer (see `go.mod`).
-- Linux with a Wayland compositor or an X server, and an EGL driver with OpenGL ES 3.0 (Mesa 20 or newer, NVIDIA through glvnd, or llvmpipe). glutter calls the system libraries (Wayland, xkbcommon, libdecor) at run time, so no toolkit packages are needed to build. `GLUTTER_BACKEND=x11|wayland` chooses the backend.
-- A C compiler (`gcc`), because the SQLite driver of gorm is a cgo binding.
+- **macOS** 12 or newer, Apple silicon or Intel (glutter 1.16 draws with AppKit and Metal; nothing else to install). Or Linux with a Wayland compositor or an X server, and an EGL driver with OpenGL ES 3.0 (Mesa 20 or newer, NVIDIA through glvnd, or llvmpipe). glutter calls the system libraries (Wayland, xkbcommon, libdecor) at run time, so no toolkit packages are needed to build. `GLUTTER_BACKEND=x11|wayland` chooses the backend.
+- A C compiler (`gcc`, or the Xcode command line tools on a Mac), because the SQLite driver of gorm is a cgo binding.
 - A running LLM: for example [Ollama](https://ollama.com) with a model such as `llama3.1`, an OpenAI-compatible server, or an Anthropic API key.
 
 Installing the C compiler:
@@ -55,13 +55,17 @@ The program is put in `$(go env GOBIN)`, or in `$(go env GOPATH)/bin` (usually `
 
 ### Add it to the application menu
 
-To find English Tutor in your desktop's application menu (the "start menu"), run the installed program once with:
+To find English Tutor in your desktop's application menu (the "start menu"; on a Mac, the Launchpad and Spotlight), run the installed program once with:
 
 ```
 english-tutor -setup-desktop
 ```
 
 It writes a desktop entry to `~/.local/share/applications/dev.rm4n0s.english-tutor.desktop` and an icon to `~/.local/share/icons/hicolor/64x64/apps/`, using `$XDG_DATA_HOME` instead of `~/.local/share` when that is set, and then exits. The entry points at the program you ran, so run it from where the program will stay; if you move it later, run the flag again. Delete the two files to remove the entry. Some desktops need a moment, or a new login, before the menu shows it.
+
+On a Mac the same flag makes `~/Applications/English Tutor.app`, a small application bundle (an `Info.plist`, the icon as an `.icns` file, and a launcher script that runs the program you ran), instead of the desktop entry. Delete the bundle to remove it; run the flag again if you move the program.
+
+![English Tutor on macOS](docs/screenshots/macos-glutter-1.16.png)
 
 ## First steps
 
